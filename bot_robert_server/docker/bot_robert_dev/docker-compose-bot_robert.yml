@@ -4,7 +4,7 @@ services:
       context: ../../../
       dockerfile: ./bot_robert_server/docker/bot_robert_dev/app.Dockerfile
     environment:
-      -
+      - BOT_ROBERT_API_KEY
     volumes:
       - ../../../:/var/app:Z
     ports:
