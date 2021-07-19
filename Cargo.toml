@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "bot_robert_server",
+    "bot_robert_lib",
+]

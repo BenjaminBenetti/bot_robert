@@ -1,0 +1,11 @@
+services:
+  app:
+    build:
+      context: ../../../
+      dockerfile: ./bot_robert_server/docker/bot_robert_dev/app.Dockerfile
+    environment:
+      -
+    volumes:
+      - ../../../:/var/app:Z
+    ports:
+    - 8080:8080
