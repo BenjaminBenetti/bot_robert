@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 actix-web="^3.0.0"
+serde = "^1.0.126"
+regex = "^1.5.4"
