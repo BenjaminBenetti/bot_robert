@@ -24,7 +24,7 @@ pub fn process_command(user_name: &String, args: &String) -> SlackResponse {
         for processor in command_processors {
             if processor.can_handle_command(args) {
                 println!("Processing Command: [{}] From User: [{}]", args, user_name);
-                return processor.handle_command(args, user_name)
+                return processor.handle_command(args, user_name).unwrap_or(SlackResponse::from_string("Ahhhhhh... I need a beer."))
             }
         }
 

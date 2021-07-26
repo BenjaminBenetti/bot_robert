@@ -20,4 +20,8 @@ impl SlackResponse {
     pub fn from_string(str: &str) -> SlackResponse {
         SlackResponse::new(Some(&SlackResponseType::InChannel), None, Some(&String::from(str)))
     }
+
+    pub fn from_string_ephemeral(str: &str) -> SlackResponse {
+        SlackResponse::new(Some(&SlackResponseType::Ephemeral), None, Some(&String::from(str)))
+    }
 }

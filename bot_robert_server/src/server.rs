@@ -13,5 +13,6 @@ pub async fn start_server(address: &str, port: &str) -> std::io::Result<()> {
 /// Configure the server. Put routes here. (probably better way to organize this)
 fn configure_app(cfg: &mut web::ServiceConfig) {
     cfg.service(api::slack::command_ws::slash_command);
+    cfg.service(api::slack::action_ws::inbound_slack_action);
 }
 

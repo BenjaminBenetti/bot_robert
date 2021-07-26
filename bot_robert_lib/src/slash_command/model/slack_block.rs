@@ -25,7 +25,8 @@ impl SlackBlock {
     /// ### params
     /// - label. The label of the text input
     /// - placeholder. Placeholder text to show inside the input
-    pub fn new_text_input(label: &str, placeholder: &str) -> SlackBlock {
+    /// - action_id. Action id of this input
+    pub fn new_text_input(label: &str, placeholder: &str, action_id: &str) -> SlackBlock {
         SlackBlock::new(
             SlackBlockType::Input,
             vec!(&SlackElement::new(
@@ -33,7 +34,7 @@ impl SlackBlock {
                 None,
                 None,
                 Some(&String::from(placeholder)),
-                Some(&String::from("plain_text_input-action"))
+                Some(&String::from(action_id))
             )),
             Some(&SlackText::new(label)),
             None)
@@ -54,6 +55,31 @@ impl SlackBlock {
                 None,
                 Some(&String::from(action_id))
             )),
+            None,
+            None)
+    }
+
+    /// create a slack block that is a button. Includes a second button for canceling
+    /// ### params
+    /// - text. The text on the button.
+    /// - value. The value submitted when the button is clicked.
+    /// - action_id. the slack action id for this button.
+    pub fn new_button_with_cancel(text: &str, value: &str, action_id: &str) -> SlackBlock {
+        SlackBlock::new(
+            SlackBlockType::Actions,
+            vec!(&SlackElement::new(
+                SlackElementType::Button,
+                Some(&SlackText::new(text)),
+                Some(&String::from(value)),
+                None,
+                Some(&String::from(action_id))),
+                 &SlackElement::new(
+                     SlackElementType::Button,
+                     Some(&SlackText::new("Cancel")),
+                     Some(&String::from("cancel")),
+                     None,
+                     Some(&String::from("cancel-action")))
+            ),
             None,
             None)
     }

@@ -15,5 +15,5 @@ pub trait CommandMatcher {
         false
     }
 
-    fn get_command_name(&self) -> &String;
+    fn get_command_name(&self) -> String;
 }

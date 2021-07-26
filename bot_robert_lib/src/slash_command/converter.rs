@@ -2,3 +2,7 @@ pub mod slack_response_to_transfer;
 mod slack_block_to_transfer;
 mod slack_element_to_transfer;
 mod slack_text_to_transfer;
+pub mod slack_block_actions_to_model;
+mod slack_block_actions_action_to_model;
+mod slack_text_transfer_to_model;
+mod slack_block_actions_states_to_model;

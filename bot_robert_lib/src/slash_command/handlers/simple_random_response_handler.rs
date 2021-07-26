@@ -20,16 +20,16 @@ impl SimpleRandomResponseHandler {
 }
 
 impl CommandProcessor for SimpleRandomResponseHandler {
-    fn handle_command(&self, _command: &String, _user_name: &String) -> SlackResponse {
+    fn handle_command(&self, _command: &String, _user_name: &String) -> Option<SlackResponse> {
         let rand_index = rand::thread_rng().gen_range(0..(self.responses.len() -1));
-        self.responses.get(rand_index).map(|resp| resp.clone())
-            .unwrap_or(SlackResponse::from_string(&String::from("Hmm. This doesn't seem right. :/")).clone())
+        Some(self.responses.get(rand_index).map(|resp| resp.clone())
+            .unwrap_or(SlackResponse::from_string(&String::from("Hmm. This doesn't seem right. :/")).clone()))
     }
 }
 
 impl CommandMatcher for SimpleRandomResponseHandler {
-    fn get_command_name(&self) -> &String {
-        &self.command_name
+    fn get_command_name(&self) -> String {
+        self.command_name.clone()
     }
 }
 

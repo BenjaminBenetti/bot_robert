@@ -9,11 +9,11 @@ pub fn joke_add_response() -> SlackResponse {
             // instructions.
             &SlackBlock::new_text_block("Add a new joke to RobertBot!"),
             // Joke Setup input
-            &SlackBlock::new_text_input("Setup", "Setup of your joke"),
+            &SlackBlock::new_text_input("Setup", "Setup of your joke", "setup"),
             // Joke punchline input
-            &SlackBlock::new_text_input("Punchline", "Punchline of your joke"),
+            &SlackBlock::new_text_input("Punchline", "Punchline of your joke", "punchline"),
             // Joke add button. User clicks to add the joke!
-            &SlackBlock::new_button("Add Joke", "joke-add", "joke-add-action")
+            &SlackBlock::new_button_with_cancel("Add Joke", "joke-add", "joke-add-action")
         )),
         None,
     )

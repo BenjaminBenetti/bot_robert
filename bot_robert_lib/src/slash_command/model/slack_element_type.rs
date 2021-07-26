@@ -1,4 +1,4 @@
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum SlackElementType {
     PlaneText,
     PlaneTextInput,
@@ -17,6 +17,23 @@ impl ToString for SlackElementType {
             SlackElementType::Button => {
                 String::from("button")
             }
+        }
+    }
+}
+
+impl From<&String> for SlackElementType {
+    fn from(str: &String) -> Self {
+        return if *str == SlackElementType::PlaneText.to_string() {
+            SlackElementType::PlaneText
+        }
+        else if *str == SlackElementType::PlaneTextInput.to_string() {
+            SlackElementType::PlaneTextInput
+        }
+        else if *str == SlackElementType::Button.to_string() {
+            SlackElementType::Button
+        }
+        else {
+            SlackElementType::PlaneText
         }
     }
 }
