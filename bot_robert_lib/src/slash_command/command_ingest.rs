@@ -3,6 +3,7 @@ use crate::slash_command::{jokes, SlackResponse};
 use crate::slash_command::handlers::fixed_response_handler::FixedResponseHandler;
 use crate::slash_command::handlers::command_handler::CommandHandler;
 use crate::slash_command::handlers::simple_random_response_handler::SimpleRandomResponseHandler;
+use crate::slash_command::factory::slack_response_factory;
 
 /// process an incoming slash command
 /// ### params
@@ -16,7 +17,7 @@ pub fn process_command(user_name: &String, args: &String) -> SlackResponse {
 
     if let Ok(robert_reg) = robert_regex {
         if robert_reg.is_match(&user_name) {
-            return SlackResponse::from_string(&String::from("I'm talking to my self!"));
+            return SlackResponse::from_string(&String::from("I'm talking to myself!"));
         }
 
         // handle command
@@ -39,6 +40,7 @@ fn get_command_processors() -> Vec<Box<dyn CommandHandler>> {
     vec!(
         Box::new(FixedResponseHandler::new(&String::from("source"),
                                   &SlackResponse::from_string(&String::from("https://github.com/CanadianCommander/bot_robert")))),
-        Box::new(SimpleRandomResponseHandler::new(&String::from("joke"), &jokes::jokes_as_slack_responses()))
+        Box::new(SimpleRandomResponseHandler::new(&String::from("joke"), &jokes::jokes_as_slack_responses())),
+        Box::new(FixedResponseHandler::new(&String::from("joke-add"), &slack_response_factory::joke_add_response()))
     )
 }
