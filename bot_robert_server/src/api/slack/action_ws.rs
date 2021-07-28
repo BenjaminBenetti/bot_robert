@@ -9,7 +9,7 @@ pub async fn inbound_slack_action(slack_payload: Form<SlackFormPayloadTransfer>)
     // Slack will send multiple different requests to this endpoint.
     let now = Instant::now();
 
-    match bot_robert_lib::slash_command::process_action(&slack_payload) {
+    match bot_robert_lib::slash_command::process_action(&slack_payload).await {
         Ok((res, url)) => {
             if let Some(url) = url {
                 send_reply_to_slack(&res, &url).await;

@@ -14,6 +14,7 @@ mod slack_action_type;
 mod slack_block_actions_state;
 
 pub use joke::Joke;
+pub use joke::DB_JOKE_COLLECTION;
 pub use slack_response_type::SlackResponseType;
 pub use slack_response::SlackResponse;
 pub use slack_block::SlackBlock;

@@ -1,11 +1,23 @@
 services:
+  mongodb:
+    image: mongo:4.4.6
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: ${BOT_ROBERT_DB_PASSWORD}
+    volumes:
+      - ../../.docker/db/:/data/db:Z
+
   app:
     build:
       context: ../../../
       dockerfile: ./bot_robert_server/docker/bot_robert_dev/app.Dockerfile
     environment:
       - BOT_ROBERT_API_KEY
+      - BOT_ROBERT_DB_PASSWORD
     volumes:
       - ../../../:/var/app:Z
+    depends_on:
+      - mongodb
     ports:
     - 8080:8080

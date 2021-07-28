@@ -11,8 +11,8 @@ use crate::slash_command::factory::slack_response_factory;
 /// `args` the command args string
 /// ### return
 /// a slack response representing the response to send to the user
-pub fn process_command(user_name: &String, args: &String) -> SlackResponse {
-    let command_processors = get_command_processors();
+pub async fn process_command(user_name: &String, args: &String) -> SlackResponse {
+    let command_processors = get_command_processors().await;
     let robert_regex = Regex::new(r"^[rR]obert.*");
 
     if let Ok(robert_reg) = robert_regex {
@@ -36,11 +36,11 @@ pub fn process_command(user_name: &String, args: &String) -> SlackResponse {
 }
 
 /// get command processor list
-fn get_command_processors() -> Vec<Box<dyn CommandHandler>> {
+async fn get_command_processors() -> Vec<Box<dyn CommandHandler>> {
     vec!(
         Box::new(FixedResponseHandler::new(&String::from("source"),
                                   &SlackResponse::from_string(&String::from("https://github.com/CanadianCommander/bot_robert")))),
-        Box::new(SimpleRandomResponseHandler::new(&String::from("joke"), &jokes::jokes_as_slack_responses())),
+        Box::new(SimpleRandomResponseHandler::new(&String::from("joke"), &jokes::jokes_as_slack_responses().await)),
         Box::new(FixedResponseHandler::new(&String::from("joke-add"), &slack_response_factory::joke_add_response()))
     )
 }

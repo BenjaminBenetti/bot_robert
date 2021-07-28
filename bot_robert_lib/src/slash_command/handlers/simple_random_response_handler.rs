@@ -21,7 +21,7 @@ impl SimpleRandomResponseHandler {
 
 impl CommandProcessor for SimpleRandomResponseHandler {
     fn handle_command(&self, _command: &String, _user_name: &String) -> Option<SlackResponse> {
-        let rand_index = rand::thread_rng().gen_range(0..(self.responses.len() -1));
+        let rand_index = rand::thread_rng().gen_range(0..(self.responses.len()));
         Some(self.responses.get(rand_index).map(|resp| resp.clone())
             .unwrap_or(SlackResponse::from_string(&String::from("Hmm. This doesn't seem right. :/")).clone()))
     }

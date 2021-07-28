@@ -7,7 +7,7 @@ use std::time::Instant;
 #[post("/api/slack/cmd")]
 pub async fn slash_command(slash_cmd: web::Form<SlashCommandTransfer>) -> impl Responder {
     let now = Instant::now();
-    let response = bot_robert_lib::slash_command::process_command(&slash_cmd.user_name, &slash_cmd.text);
+    let response = bot_robert_lib::slash_command::process_command(&slash_cmd.user_name, &slash_cmd.text).await;
     let http_response = HttpResponse::Ok().json(slack_response_to_transfer::convert(&response));
     println!("Slash command processed in: {}ms", now.elapsed().as_millis());
     return http_response;
