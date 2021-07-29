@@ -12,6 +12,7 @@ mod slack_block_actions;
 mod slack_block_actions_action;
 mod slack_action_type;
 mod slack_block_actions_state;
+mod commands;
 
 pub use joke::Joke;
 pub use joke::DB_JOKE_COLLECTION;
@@ -28,3 +29,4 @@ pub use slack_block_actions::SlackBlockActions;
 pub use slack_block_actions_action::SlackBlockActionsAction;
 pub use slack_action_type::SlackActionType;
 pub use slack_block_actions_state::SlackBlockActionsState;
+pub use commands::Command;

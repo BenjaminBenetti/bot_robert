@@ -1,4 +1,4 @@
-use crate::slash_command::{SlackResponse, SlackBlock};
+use crate::slash_command::{SlackResponse, SlackBlock, Command, SlackResponseType};
 
 /// get a slack response that presents the joke add interface.
 /// Users use this to add new jokes to the system.
@@ -17,4 +17,20 @@ pub fn joke_add_response() -> SlackResponse {
         )),
         None,
     )
+}
+
+/// help message that informs users of RobertBot's features
+pub fn help_response() -> SlackResponse {
+    let command_text = Command::all().into_iter().fold(String::new(),|command_description, cmd| {
+        let (command, description) = cmd;
+        format!("{}*{}* - {}\n", command_description, command.to_string(), description)
+    });
+
+    SlackResponse::new(Some(&SlackResponseType::Ephemeral), Some(vec!(
+        &SlackBlock::new_text_block(&format!("\
+        *RobertBot the future of Robert.*\n\
+        _Usage_: /robert-bot <command> [options]\n\
+        *= Commands =* \n\
+        {}", command_text))
+    )), None)
 }

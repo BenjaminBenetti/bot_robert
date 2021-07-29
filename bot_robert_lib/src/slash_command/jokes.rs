@@ -30,6 +30,7 @@ async fn get_custom_jokes() -> Result<Vec<Joke>, Box<dyn Error>> {
             Err(_) => return None,
         };
 
+        // Nothing like raw string "column names"... lol. Super easy to maintain. Need ORM.
         let setup = document.get("setup");
         let punchline = document.get("punchline");
 
