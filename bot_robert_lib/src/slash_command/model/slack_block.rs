@@ -36,7 +36,7 @@ impl SlackBlock {
                 Some(&String::from(placeholder)),
                 Some(&String::from(action_id))
             )),
-            Some(&SlackText::new(label)),
+            Some(&SlackText::new_plain_text(label)),
             None)
     }
 
@@ -50,7 +50,7 @@ impl SlackBlock {
             SlackBlockType::Actions,
             vec!(&SlackElement::new(
                 SlackElementType::Button,
-                Some(&SlackText::new(text)),
+                Some(&SlackText::new_plain_text(text)),
                 Some(&String::from(value)),
                 None,
                 Some(&String::from(action_id))
@@ -69,13 +69,13 @@ impl SlackBlock {
             SlackBlockType::Actions,
             vec!(&SlackElement::new(
                 SlackElementType::Button,
-                Some(&SlackText::new(text)),
+                Some(&SlackText::new_plain_text(text)),
                 Some(&String::from(value)),
                 None,
                 Some(&String::from(action_id))),
                  &SlackElement::new(
                      SlackElementType::Button,
-                     Some(&SlackText::new("Cancel")),
+                     Some(&SlackText::new_plain_text("Cancel")),
                      Some(&String::from("cancel")),
                      None,
                      Some(&String::from("cancel-action")))
@@ -92,6 +92,15 @@ impl SlackBlock {
             SlackBlockType::Section,
             vec!(),
             None,
-            Some(&SlackText::new(text)))
+            Some(&SlackText::new_markdown_text(text)))
+    }
+
+    /// create a slack block that is a divider
+    pub fn new_divider() -> SlackBlock {
+        SlackBlock::new(
+            SlackBlockType::Divider,
+            vec!(),
+            None,
+            None)
     }
 }

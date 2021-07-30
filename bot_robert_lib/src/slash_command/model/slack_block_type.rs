@@ -2,7 +2,8 @@
 pub enum SlackBlockType {
     Input,
     Actions,
-    Section
+    Section,
+    Divider,
 }
 
 impl SlackBlockType {
@@ -11,6 +12,7 @@ impl SlackBlockType {
             SlackBlockType::Input => String::from("input"),
             SlackBlockType::Actions => String::from("actions"),
             SlackBlockType::Section => String::from("section"),
+            SlackBlockType::Divider => String::from("divider"),
         }
     }
 }

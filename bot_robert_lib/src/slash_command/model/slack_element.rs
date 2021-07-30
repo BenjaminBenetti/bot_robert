@@ -16,7 +16,7 @@ impl SlackElement {
             element_type,
             text: text.cloned(),
             value: value.cloned(),
-            placeholder: placeholder.map(|placeholder| SlackText::new(placeholder)),
+            placeholder: placeholder.map(|placeholder| SlackText::new_plain_text(placeholder)),
             action_id: action_id.cloned(),
         }
     }

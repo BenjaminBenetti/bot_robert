@@ -27,10 +27,10 @@ pub fn help_response() -> SlackResponse {
     });
 
     SlackResponse::new(Some(&SlackResponseType::Ephemeral), Some(vec!(
-        &SlackBlock::new_text_block(&format!("\
-        *RobertBot the future of Robert.*\n\
-        _Usage_: /robert-bot <command> [options]\n\
-        *= Commands =* \n\
+        &SlackBlock::new_text_block("*RobertBot the future of Robert.*\n_Usage_: /robert-bot <command> [options]\n"),
+        &SlackBlock::new_divider(),
+        &SlackBlock::new_text_block(&format!(
+        "*= Commands =* \n\
         {}", command_text))
     )), None)
 }
