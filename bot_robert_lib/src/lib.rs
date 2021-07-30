@@ -5,3 +5,4 @@ mod error;
 pub mod model;
 pub mod transfer;
 pub mod converter;
+pub mod service;

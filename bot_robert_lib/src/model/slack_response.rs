@@ -2,6 +2,7 @@ use crate::model::*;
 
 #[derive(Clone)]
 pub struct SlackResponse {
+    pub channel: Option<String>,
     pub response_type: Option<SlackResponseType>,
     pub blocks: Option<Vec<SlackBlock>>,
     pub text: Option<String>,
@@ -10,6 +11,7 @@ pub struct SlackResponse {
 impl SlackResponse {
     pub fn new(response_type: Option<&SlackResponseType>, blocks: Option<Vec<&SlackBlock>>, text: Option<&String>) -> SlackResponse {
         SlackResponse {
+            channel: None,
             response_type: response_type.cloned(),
             blocks: blocks.map(|block_vec| block_vec.into_iter().map(|block| block.clone()).collect()),
             text: text.map(|t| t.clone()),

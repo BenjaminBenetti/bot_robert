@@ -1,5 +1,6 @@
 use std::env;
 use std::env::VarError;
+use bot_robert_lib::model::SlackResponse;
 
 mod api;
 mod server;
