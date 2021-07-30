@@ -1,6 +1,5 @@
 use crate::*;
-use crate::slash_command::model::Joke;
-use crate::slash_command::{SlackResponse, DB_JOKE_COLLECTION};
+use crate::model::*;
 use std::error::Error;
 use futures::StreamExt;
 

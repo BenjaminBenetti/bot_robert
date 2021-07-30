@@ -1,6 +1,6 @@
-use crate::slash_command::transfer::{SlackInteractionPayloadTransfer, SlackFormPayloadTransfer, SlackBlockActionsPayloadTransfer};
-use crate::slash_command::{SlackPayloadType, SlackBlockActions, SlackResponse};
-use crate::slash_command::converter::*;
+use crate::transfer::{SlackInteractionPayloadTransfer, SlackFormPayloadTransfer, SlackBlockActionsPayloadTransfer};
+use crate::model::*;
+use crate::converter::*;
 use std::error::Error;
 use crate::slash_command::handlers::command_handler::CommandHandler;
 use crate::slash_command::handlers::joke_add_handler::JokeAddHandler;

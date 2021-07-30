@@ -1,5 +1,5 @@
 use serde::{Serialize, Deserialize};
-use crate::slash_command::transfer::SlackBlockActionsStateTransfer;
+use crate::transfer::SlackBlockActionsStateTransfer;
 use std::collections::HashMap;
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -1,4 +1,4 @@
-use crate::slash_command::SlackResponse;
+use crate::model::*;
 use crate::slash_command::handlers::command_processor::CommandProcessor;
 use crate::slash_command::handlers::command_matcher::CommandMatcher;
 use crate::slash_command::handlers::command_handler::CommandHandler;

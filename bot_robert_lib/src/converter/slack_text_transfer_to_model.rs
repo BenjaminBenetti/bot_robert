@@ -1,5 +1,5 @@
-use crate::slash_command::transfer::SlackTextTransfer;
-use crate::slash_command::{SlackText, SlackTextType};
+use crate::transfer::SlackTextTransfer;
+use crate::model::*;
 
 pub fn convert(transfer: &SlackTextTransfer) -> SlackText {
     SlackText {

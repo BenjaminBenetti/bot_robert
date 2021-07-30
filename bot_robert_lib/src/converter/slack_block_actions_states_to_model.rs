@@ -1,5 +1,5 @@
-use crate::slash_command::transfer::SlackBlockActionsStatesTransfer;
-use crate::slash_command::{SlackBlockActionsState, SlackElementType};
+use crate::transfer::SlackBlockActionsStatesTransfer;
+use crate::model::*;
 
 pub fn convert(transfer: &SlackBlockActionsStatesTransfer) -> Vec<SlackBlockActionsState> {
     (&transfer.values).into_iter().map(|state| -> Vec<SlackBlockActionsState> {

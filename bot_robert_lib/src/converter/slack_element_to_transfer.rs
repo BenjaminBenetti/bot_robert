@@ -1,6 +1,6 @@
-use crate::slash_command::transfer::SlackElementTransfer;
-use crate::slash_command::SlackElement;
-use crate::slash_command::converter::*;
+use crate::transfer::SlackElementTransfer;
+use crate::model::*;
+use crate::converter::*;
 
 pub fn convert(slack_element: &SlackElement) -> SlackElementTransfer {
     SlackElementTransfer {

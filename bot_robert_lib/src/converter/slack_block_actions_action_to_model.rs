@@ -1,6 +1,6 @@
-use crate::slash_command::transfer::SlackBlockActionsActionTransfer;
-use crate::slash_command::{SlackBlockActionsAction, SlackActionType};
-use crate::slash_command::converter::*;
+use crate::transfer::SlackBlockActionsActionTransfer;
+use crate::model::*;
+use crate::converter::*;
 
 pub fn convert(transfer: &SlackBlockActionsActionTransfer) -> SlackBlockActionsAction {
     SlackBlockActionsAction {

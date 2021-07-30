@@ -1,6 +1,6 @@
 use actix_web::{post, web, HttpResponse, Responder};
-use bot_robert_lib::slash_command::transfer::{SlashCommandTransfer};
-use bot_robert_lib::slash_command::converter::slack_response_to_transfer;
+use bot_robert_lib::transfer::{SlashCommandTransfer};
+use bot_robert_lib::converter::slack_response_to_transfer;
 use std::time::Instant;
 
 /// handles incoming slash command from slack.

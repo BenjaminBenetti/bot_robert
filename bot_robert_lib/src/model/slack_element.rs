@@ -1,5 +1,4 @@
-use crate::slash_command::model::slack_element_type::SlackElementType;
-use crate::slash_command::SlackText;
+use crate::model::*;
 
 #[derive(Clone)]
 pub struct SlackElement {

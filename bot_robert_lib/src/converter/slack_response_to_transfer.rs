@@ -1,6 +1,6 @@
-use crate::slash_command::{SlackResponse, SlackBlock};
-use crate::slash_command::transfer::SlackResponseTransfer;
-use crate::slash_command::converter::*;
+use crate::model::*;
+use crate::transfer::SlackResponseTransfer;
+use crate::converter::*;
 
 /// convert a slack response to transfer
 /// ### params

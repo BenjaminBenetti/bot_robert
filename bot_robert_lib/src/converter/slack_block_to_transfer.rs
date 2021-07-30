@@ -1,6 +1,6 @@
-use crate::slash_command::{SlackBlock, SlackBlockType, SlackElement};
-use crate::slash_command::transfer::SlackBlockTransfer;
-use crate::slash_command::converter::*;
+use crate::model::*;
+use crate::transfer::SlackBlockTransfer;
+use crate::converter::*;
 
 pub fn convert(slack_block: &SlackBlock) -> SlackBlockTransfer {
     // slack, depending on block type, requires "element" or "elements".

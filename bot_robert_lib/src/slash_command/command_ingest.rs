@@ -1,10 +1,12 @@
 use regex::Regex;
-use crate::slash_command::{jokes, SlackResponse, Command};
+use crate::model::*;
+use crate::slash_command::jokes;
 use crate::slash_command::handlers::fixed_response_handler::FixedResponseHandler;
 use crate::slash_command::handlers::command_handler::CommandHandler;
 use crate::slash_command::handlers::simple_random_response_handler::SimpleRandomResponseHandler;
 use crate::slash_command::factory::slack_response_factory;
 use crate::slash_command::factory::lunch_options_factory;
+use crate::slash_command::model::Command;
 
 /// process an incoming slash command
 /// ### params

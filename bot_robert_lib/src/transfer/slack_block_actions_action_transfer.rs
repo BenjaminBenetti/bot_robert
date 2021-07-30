@@ -1,5 +1,5 @@
 use serde::{Serialize, Deserialize};
-use crate::slash_command::transfer::SlackTextTransfer;
+use crate::transfer::SlackTextTransfer;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SlackBlockActionsActionTransfer {

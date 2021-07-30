@@ -1,4 +1,4 @@
-use crate::slash_command::SlackTextType;
+use crate::model::*;
 
 #[derive(Clone, Debug)]
 pub struct SlackText {

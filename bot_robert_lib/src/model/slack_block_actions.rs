@@ -1,4 +1,4 @@
-use crate::slash_command::{SlackBlockActionsAction, SlackBlockActionsState};
+use crate::model::*;
 
 #[derive(Clone, Debug)]
 pub struct SlackBlockActions {

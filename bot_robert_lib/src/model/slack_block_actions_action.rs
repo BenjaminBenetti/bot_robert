@@ -1,4 +1,4 @@
-use crate::slash_command::{SlackText, SlackActionType};
+use crate::model::*;
 
 #[derive(Clone, Debug)]
 pub struct SlackBlockActionsAction {

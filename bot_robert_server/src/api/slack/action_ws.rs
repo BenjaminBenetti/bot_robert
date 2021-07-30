@@ -1,7 +1,7 @@
 use actix_web::{post, Responder, HttpResponse, web::Form};
-use bot_robert_lib::slash_command::transfer::SlackFormPayloadTransfer;
-use bot_robert_lib::slash_command::SlackResponse;
-use bot_robert_lib::slash_command::converter::slack_response_to_transfer;
+use bot_robert_lib::transfer::SlackFormPayloadTransfer;
+use bot_robert_lib::model::SlackResponse;
+use bot_robert_lib::converter::slack_response_to_transfer;
 use std::time::Instant;
 
 #[post("/api/slack/action")]

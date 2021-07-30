@@ -1,4 +1,5 @@
-use crate::slash_command::{SlackResponse, SlackBlock, Command, SlackResponseType};
+use crate::model::*;
+use crate::slash_command::model::Command;
 
 /// get a slack response that presents the joke add interface.
 /// Users use this to add new jokes to the system.

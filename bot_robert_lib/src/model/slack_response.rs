@@ -1,5 +1,4 @@
-use crate::slash_command::SlackResponseType;
-use crate::slash_command::model::slack_block::SlackBlock;
+use crate::model::*;
 
 #[derive(Clone)]
 pub struct SlackResponse {

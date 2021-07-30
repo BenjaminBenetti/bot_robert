@@ -1,4 +1,4 @@
-use crate::slash_command::{SlackResponse, SlackBlockActions};
+use crate::model::*;
 use async_trait::async_trait;
 
 #[async_trait]

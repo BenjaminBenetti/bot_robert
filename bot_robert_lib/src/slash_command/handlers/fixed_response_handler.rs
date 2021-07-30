@@ -1,5 +1,5 @@
 use crate::slash_command::handlers::command_processor::CommandProcessor;
-use crate::slash_command::{SlackResponse, SlackBlockActions};
+use crate::model::*;
 use crate::slash_command::handlers::command_matcher::CommandMatcher;
 use crate::slash_command::handlers::command_handler::CommandHandler;
 use async_trait::async_trait;

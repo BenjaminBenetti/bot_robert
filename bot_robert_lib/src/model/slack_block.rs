@@ -1,7 +1,4 @@
-use crate::slash_command::model::slack_block_type::SlackBlockType;
-use crate::slash_command::model::slack_element::SlackElement;
-use crate::slash_command::model::slack_text::SlackText;
-use crate::slash_command::SlackElementType;
+use crate::model::*;
 
 #[derive(Clone)]
 pub struct SlackBlock {

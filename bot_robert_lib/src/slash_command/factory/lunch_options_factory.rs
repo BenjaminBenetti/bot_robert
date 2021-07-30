@@ -1,4 +1,4 @@
-use crate::slash_command::SlackResponse;
+use crate::model::*;
 
 /// gets a list of lunch options as a slack response array
 pub fn lunch_options() -> Vec<SlackResponse> {
