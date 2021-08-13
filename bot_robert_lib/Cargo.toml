@@ -16,5 +16,10 @@ lazy_static = "^1.4.0"
 mongodb = "^1.2.2"
 futures = "^0.3"
 async-trait = "^0.1.50"
-tokio = { version = "^1.9.0", features = ["sync"] }
+tokio = { version = "^1.9.0", features = ["full"] }
 actix-web = {version = "^3.0.0", features = ["openssl"] }
+reqwest = { version = "0.11", features = ["json"] }
+actix-rt = "^2.2.0"
+chrono = "^0.4.19"
+chrono-tz = "^0.5"
+async-std ="^1.9.0"

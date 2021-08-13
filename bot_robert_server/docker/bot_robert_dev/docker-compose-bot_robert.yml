@@ -15,8 +15,9 @@ services:
     environment:
       - BOT_ROBERT_API_KEY
       - BOT_ROBERT_DB_PASSWORD
+      - RUST_BACKTRACE=1
     volumes:
-      - ../../../:/var/app:Z
+      - ../../../:/var/app/:Z
     depends_on:
       - mongodb
     ports:

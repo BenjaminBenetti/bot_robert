@@ -7,6 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+actix-rt = "^2.2.0"
 actix-web = {version = "^3.0.0", features = ["openssl"] }
 serde = "^1.0.126"
 bot_robert_lib = {path = "../bot_robert_lib"}

@@ -1,4 +1,3 @@
-use regex::Regex;
 use crate::model::*;
 use crate::slash_command::jokes;
 use crate::slash_command::handlers::fixed_response_handler::FixedResponseHandler;
@@ -16,26 +15,16 @@ use crate::slash_command::model::Command;
 /// a slack response representing the response to send to the user
 pub async fn process_command(user_name: &String, args: &String) -> SlackResponse {
     let command_processors = get_command_processors().await;
-    let robert_regex = Regex::new(r"^[rR]obert.*");
 
-    if let Ok(robert_reg) = robert_regex {
-        if robert_reg.is_match(&user_name) {
-            return SlackResponse::from_string(&String::from("I'm talking to myself!"));
+    // handle command
+    for processor in command_processors {
+        if processor.can_handle_command(args) {
+            println!("Processing Command: [{}] From User: [{}]", args, user_name);
+            return processor.handle_command(args, user_name).unwrap_or(SlackResponse::from_string("Ahhhhhh... I need a beer."))
         }
-
-        // handle command
-        for processor in command_processors {
-            if processor.can_handle_command(args) {
-                println!("Processing Command: [{}] From User: [{}]", args, user_name);
-                return processor.handle_command(args, user_name).unwrap_or(SlackResponse::from_string("Ahhhhhh... I need a beer."))
-            }
-        }
-
-        return SlackResponse::from_string(&String::from("I dont understand! This is an HR violation!"))
     }
-    else {
-        return SlackResponse::from_string(&String::from("Uh-O ... some this went wrong :("));
-    }
+
+    return SlackResponse::from_string(&String::from("I dont understand! This is an HR violation!"))
 }
 
 /// get command processor list
