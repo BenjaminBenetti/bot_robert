@@ -20,7 +20,11 @@ impl BeerOClock {
 #[async_trait]
 impl Task for BeerOClock {
     async fn run(&mut self) {
-        let _ = messaging::post_message_to_channel("CLKSLCJU9", SlackResponse::from_string("It's Beer O Clock! :beers:")).await;
+        let req_result = messaging::post_message_to_channel("C03CMGVTH53", SlackResponse::from_string("It's Beer O Clock! :beers:")).await;
+        match req_result {
+            Err(e) => println!("Got error posting really important message to slack: {} ", e),
+            Ok(_) => (),
+        }
     }
 
     async fn kill(&mut self) {

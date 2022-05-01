@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::env;
 use lazy_static::lazy_static;
-use reqwest::RequestBuilder;
+use reqwest::{RequestBuilder, Response};
 
 lazy_static! {
     pub static ref SLACK_API_KEY: String = {
@@ -9,13 +9,12 @@ lazy_static! {
     };
 }
 
-pub async fn do_post(url: &str, post_body: &String) -> Result<(), Box<dyn Error>> {
+pub async fn do_post(url: &str, post_body: &String) -> Result<Response, Box<dyn Error + Send>> {
 
     let client = reqwest::Client::new();
 
-    return match set_common_headers(client.post(url))
-        .body(post_body.clone()).send().await {
-        Ok(_) => Ok(()),
+    return match set_common_headers(client.post(url)).body(post_body.clone()).send().await {
+        Ok(res) => Ok(res),
         Err(error) => {
             println!("Failed to post to slack with error: {:?}", error);
             Err(Box::new(error))
