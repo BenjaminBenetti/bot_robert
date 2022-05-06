@@ -3,7 +3,7 @@ use serde::{Serialize, Deserialize};
 use crate::transfer::slack_element_transfer::SlackElementTransfer;
 use crate::transfer::slack_text_transfer::SlackTextTransfer;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SlackBlockTransfer {
     #[serde(rename = "type")]
     pub block_type: String,

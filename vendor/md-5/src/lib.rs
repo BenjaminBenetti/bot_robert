@@ -3,51 +3,48 @@
 //! # Usage
 //!
 //! ```rust
-//! # #[macro_use] extern crate hex_literal;
-//! # extern crate md5;
-//! # fn main() {
 //! use md5::{Md5, Digest};
+//! use hex_literal::hex;
 //!
 //! // create a Md5 hasher instance
 //! let mut hasher = Md5::new();
 //!
 //! // process input message
-//! hasher.input(b"hello world");
+//! hasher.update(b"hello world");
 //!
 //! // acquire hash digest in the form of GenericArray,
 //! // which in this case is equivalent to [u8; 16]
-//! let result = hasher.result();
+//! let result = hasher.finalize();
 //! assert_eq!(result[..], hex!("5eb63bbbe01eeed093cb22bb8f5acdc3"));
-//! # }
 //! ```
 //!
 //! Also see [RustCrypto/hashes][2] readme.
 //!
 //! [1]: https://en.wikipedia.org/wiki/MD5
 //! [2]: https://github.com/RustCrypto/hashes
+
 #![no_std]
-#![doc(html_logo_url =
-    "https://raw.githubusercontent.com/RustCrypto/meta/master/logo_small.png")]
-extern crate block_buffer;
-#[macro_use] extern crate opaque_debug;
-#[macro_use] pub extern crate digest;
+#![doc(html_logo_url = "https://raw.githubusercontent.com/RustCrypto/meta/master/logo_small.png")]
+#![deny(unsafe_code)]
+#![warn(missing_docs, rust_2018_idioms)]
+
 #[cfg(feature = "asm")]
 extern crate md5_asm as utils;
+
 #[cfg(feature = "std")]
 extern crate std;
 
 #[cfg(not(feature = "asm"))]
 mod utils;
 
-use utils::compress;
+pub use digest::{self, Digest};
+
+use crate::utils::compress;
 
 use block_buffer::BlockBuffer;
-use block_buffer::byteorder::{LE, ByteOrder};
-
-pub use digest::Digest;
-use digest::{Input, BlockInput, FixedOutput, Reset};
-use digest::generic_array::GenericArray;
 use digest::generic_array::typenum::{U16, U64};
+use digest::generic_array::GenericArray;
+use digest::{BlockInput, FixedOutputDirty, Reset, Update};
 
 mod consts;
 
@@ -71,15 +68,18 @@ impl Default for Md5 {
 
 #[inline(always)]
 fn convert(d: &GenericArray<u8, U64>) -> &[u8; 64] {
-    unsafe { &*(d.as_ptr() as *const [u8; 64]) }
+    #[allow(unsafe_code)]
+    unsafe {
+        &*(d.as_ptr() as *const [u8; 64])
+    }
 }
 
 impl Md5 {
     #[inline]
-    fn finalize(&mut self) {
-        let state = &mut self.state;
+    fn finalize_inner(&mut self) {
+        let s = &mut self.state;
         let l = (self.length_bytes << 3) as u64;
-        self.buffer.len64_padding::<LE, _>(l, |d| compress(state, convert(d)));
+        self.buffer.len64_padding_le(l, |d| compress(s, convert(d)));
     }
 }
 
@@ -87,27 +87,27 @@ impl BlockInput for Md5 {
     type BlockSize = U64;
 }
 
-impl Input for Md5 {
+impl Update for Md5 {
     #[inline]
-    fn input<B: AsRef<[u8]>>(&mut self, input: B) {
+    fn update(&mut self, input: impl AsRef<[u8]>) {
         let input = input.as_ref();
         // Unlike Sha1 and Sha2, the length value in MD5 is defined as
         // the length of the message mod 2^64 - ie: integer overflow is OK.
         self.length_bytes = self.length_bytes.wrapping_add(input.len() as u64);
-        let self_state = &mut self.state;
-        self.buffer.input(input, |d| compress(self_state, convert(d)));
+        let s = &mut self.state;
+        self.buffer.input_block(input, |d| compress(s, convert(d)));
     }
 }
 
-impl FixedOutput for Md5 {
+impl FixedOutputDirty for Md5 {
     type OutputSize = U16;
 
     #[inline]
-    fn fixed_result(mut self) -> GenericArray<u8, Self::OutputSize> {
-        let mut out = GenericArray::default();
-        self.finalize();
-        LE::write_u32_into(&self.state, &mut out);
-        out
+    fn finalize_into_dirty(&mut self, out: &mut GenericArray<u8, U16>) {
+        self.finalize_inner();
+        for (chunk, v) in out.chunks_exact_mut(4).zip(self.state.iter()) {
+            chunk.copy_from_slice(&v.to_le_bytes());
+        }
     }
 }
 
@@ -119,5 +119,5 @@ impl Reset for Md5 {
     }
 }
 
-impl_opaque_debug!(Md5);
-impl_write!(Md5);
+opaque_debug::implement!(Md5);
+digest::impl_write!(Md5);

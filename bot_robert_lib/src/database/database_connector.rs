@@ -2,6 +2,9 @@ use mongodb::{Client, Database, Collection};
 use mongodb::options::ClientOptions;
 use std::error::Error;
 use crate::error::DatabaseError;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+use std::fmt::Debug;
 
 static DB_NAME: &str = "bot_robert_db";
 
@@ -46,9 +49,9 @@ impl DatabaseConnector {
     }
 
     /// get a collection from the database
-    pub fn get_collection(&self, name: &str) -> Result<Collection, Box<dyn Error>> {
+    pub fn get_collection<T: Serialize + DeserializeOwned + Unpin + Debug>(&self, name: &str) -> Result<Collection<T>, Box<dyn Error + Send>> {
         if let Some(database) = &self.database {
-            Ok(database.collection(name))
+            Ok(database.collection_with_type(name))
         }
         else {
             Err(Box::new(DatabaseError::new(&format!("Failed to fetch collection [{}] from the database.\

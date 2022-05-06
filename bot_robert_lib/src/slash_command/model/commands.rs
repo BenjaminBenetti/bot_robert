@@ -8,6 +8,7 @@ pub enum Command {
     Sarcasm,
     NewProject,
     Lunch,
+    LunchAdd,
 }
 
 impl ToString for Command {
@@ -21,6 +22,7 @@ impl ToString for Command {
             Command::Sarcasm => "sarcasm",
             Command::NewProject => "new-project",
             Command::Lunch => "lunch",
+            Command::LunchAdd => "lunch-add"
         })
     }
 }
@@ -32,6 +34,7 @@ impl Command {
             (Command::TellJoke, "RobertBot will tell everyone a funny joke.".to_string()),
             (Command::AddJoke, "Add a joke to BotRoberts joke dictionary. It will have a chance of being returned in response to the 'joke' command.".to_string()),
             (Command::Lunch, "RobertBot will pick a spot for lunch.".to_string()),
+            (Command::LunchAdd, "Add a new lunch spot to BotRobert.".to_string()),
             (Command::DarkMatter, "Let Conan know we are out of Dark Matter.".to_string()),
             (Command::SourceLink, "Get a link to the source code of BotRobert!".to_string()),
             (Command::Help, "Print information on all commands.".to_string()),

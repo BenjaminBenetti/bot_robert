@@ -7,4 +7,5 @@ pub struct SlackBlockActionsAction {
     pub block_id: String,
     pub value: Option<String>,
     pub text: Option<SlackText>,
+    pub selected_options: Option<Vec<SlackActionOption>>
 }

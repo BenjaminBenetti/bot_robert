@@ -1,9 +1,10 @@
 use crate::runtime::blocking::{BlockingTask, NoopSchedule};
 use crate::runtime::task::{self, JoinHandle};
 use crate::runtime::{blocking, context, driver, Spawner};
-use crate::util::error::CONTEXT_MISSING_ERROR;
+use crate::util::error::{CONTEXT_MISSING_ERROR, THREAD_LOCAL_DESTROYED_ERROR};
 
 use std::future::Future;
+use std::marker::PhantomData;
 use std::{error, fmt};
 
 /// Handle to the runtime.
@@ -15,21 +16,44 @@ use std::{error, fmt};
 #[derive(Debug, Clone)]
 pub struct Handle {
     pub(super) spawner: Spawner,
+}
 
+/// All internal handles that are *not* the scheduler's spawner.
+#[derive(Debug)]
+pub(crate) struct HandleInner {
     /// Handles to the I/O drivers
+    #[cfg_attr(
+        not(any(feature = "net", feature = "process", all(unix, feature = "signal"))),
+        allow(dead_code)
+    )]
     pub(super) io_handle: driver::IoHandle,
 
     /// Handles to the signal drivers
+    #[cfg_attr(
+        any(
+            loom,
+            not(all(unix, feature = "signal")),
+            not(all(unix, feature = "process")),
+        ),
+        allow(dead_code)
+    )]
     pub(super) signal_handle: driver::SignalHandle,
 
     /// Handles to the time drivers
+    #[cfg_attr(not(feature = "time"), allow(dead_code))]
     pub(super) time_handle: driver::TimeHandle,
 
     /// Source of `Instant::now()`
+    #[cfg_attr(not(all(feature = "time", feature = "test-util")), allow(dead_code))]
     pub(super) clock: driver::Clock,
 
     /// Blocking pool spawner
     pub(super) blocking_spawner: blocking::Spawner,
+}
+
+/// Create a new runtime handle.
+pub(crate) trait ToHandle {
+    fn to_handle(&self) -> Handle;
 }
 
 /// Runtime context guard.
@@ -41,32 +65,34 @@ pub struct Handle {
 #[derive(Debug)]
 #[must_use = "Creating and dropping a guard does nothing"]
 pub struct EnterGuard<'a> {
-    handle: &'a Handle,
-    guard: context::EnterGuard,
+    _guard: context::EnterGuard,
+    _handle_lifetime: PhantomData<&'a Handle>,
 }
 
 impl Handle {
-    /// Enter the runtime context. This allows you to construct types that must
+    /// Enters the runtime context. This allows you to construct types that must
     /// have an executor available on creation such as [`Sleep`] or [`TcpStream`].
-    /// It will also allow you to call methods such as [`tokio::spawn`].
+    /// It will also allow you to call methods such as [`tokio::spawn`] and [`Handle::current`]
+    /// without panicking.
     ///
     /// [`Sleep`]: struct@crate::time::Sleep
     /// [`TcpStream`]: struct@crate::net::TcpStream
     /// [`tokio::spawn`]: fn@crate::spawn
     pub fn enter(&self) -> EnterGuard<'_> {
         EnterGuard {
-            handle: self,
-            guard: context::enter(self.clone()),
+            _guard: context::enter(self.clone()),
+            _handle_lifetime: PhantomData,
         }
     }
 
-    /// Returns a `Handle` view over the currently running `Runtime`
+    /// Returns a `Handle` view over the currently running `Runtime`.
     ///
     /// # Panic
     ///
     /// This will panic if called outside the context of a Tokio runtime. That means that you must
-    /// call this on one of the threads **being run by the runtime**. Calling this from within a
-    /// thread created by `std::thread::spawn` (for example) will cause a panic.
+    /// call this on one of the threads **being run by the runtime**, or from a thread with an active
+    /// `EnterGuard`. Calling this from within a thread created by `std::thread::spawn` (for example)
+    /// will cause a panic unless that thread has an active `EnterGuard`.
     ///
     /// # Examples
     ///
@@ -90,16 +116,21 @@ impl Handle {
     /// # let handle =
     /// thread::spawn(move || {
     ///     // Notice that the handle is created outside of this thread and then moved in
-    ///     handle.spawn(async { /* ... */ })
-    ///     // This next line would cause a panic
-    ///     // let handle2 = Handle::current();
+    ///     handle.spawn(async { /* ... */ });
+    ///     // This next line would cause a panic because we haven't entered the runtime
+    ///     // and created an EnterGuard
+    ///     // let handle2 = Handle::current(); // panic
+    ///     // So we create a guard here with Handle::enter();
+    ///     let _guard = handle.enter();
+    ///     // Now we can call Handle::current();
+    ///     let handle2 = Handle::current();
     /// });
     /// # handle.join().unwrap();
     /// # });
     /// # }
     /// ```
     pub fn current() -> Self {
-        context::current().expect(CONTEXT_MISSING_ERROR)
+        context::current()
     }
 
     /// Returns a Handle view over the currently running Runtime
@@ -108,10 +139,10 @@ impl Handle {
     ///
     /// Contrary to `current`, this never panics
     pub fn try_current() -> Result<Self, TryCurrentError> {
-        context::current().ok_or(TryCurrentError(()))
+        context::try_current()
     }
 
-    /// Spawn a future onto the Tokio runtime.
+    /// Spawns a future onto the Tokio runtime.
     ///
     /// This spawns the given future onto the runtime's executor, usually a
     /// thread pool. The thread pool is then responsible for polling the future
@@ -138,18 +169,19 @@ impl Handle {
     /// });
     /// # }
     /// ```
-    #[cfg_attr(tokio_track_caller, track_caller)]
+    #[track_caller]
     pub fn spawn<F>(&self, future: F) -> JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send + 'static,
     {
+        let id = crate::runtime::task::Id::next();
         #[cfg(all(tokio_unstable, feature = "tracing"))]
-        let future = crate::util::trace::task(future, "task", None);
-        self.spawner.spawn(future)
+        let future = crate::util::trace::task(future, "task", None, id.as_u64());
+        self.spawner.spawn(future, id)
     }
 
-    /// Run the provided function on an executor dedicated to blocking
+    /// Runs the provided function on an executor dedicated to blocking.
     /// operations.
     ///
     /// # Examples
@@ -168,57 +200,20 @@ impl Handle {
     ///     println!("now running on a worker thread");
     /// });
     /// # }
-    #[cfg_attr(tokio_track_caller, track_caller)]
+    #[track_caller]
     pub fn spawn_blocking<F, R>(&self, func: F) -> JoinHandle<R>
     where
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,
     {
-        self.spawn_blocking_inner(func, None)
+        self.as_inner().spawn_blocking(self, func)
     }
 
-    #[cfg_attr(tokio_track_caller, track_caller)]
-    pub(crate) fn spawn_blocking_inner<F, R>(&self, func: F, name: Option<&str>) -> JoinHandle<R>
-    where
-        F: FnOnce() -> R + Send + 'static,
-        R: Send + 'static,
-    {
-        let fut = BlockingTask::new(func);
-
-        #[cfg(all(tokio_unstable, feature = "tracing"))]
-        let fut = {
-            use tracing::Instrument;
-            #[cfg(tokio_track_caller)]
-            let location = std::panic::Location::caller();
-            #[cfg(tokio_track_caller)]
-            let span = tracing::trace_span!(
-                target: "tokio::task",
-                "task",
-                kind = %"blocking",
-                function = %std::any::type_name::<F>(),
-                task.name = %name.unwrap_or_default(),
-                spawn.location = %format_args!("{}:{}:{}", location.file(), location.line(), location.column()),
-            );
-            #[cfg(not(tokio_track_caller))]
-            let span = tracing::trace_span!(
-                target: "tokio::task",
-                "task",
-                kind = %"blocking",
-                task.name = %name.unwrap_or_default(),
-                function = %std::any::type_name::<F>(),
-            );
-            fut.instrument(span)
-        };
-
-        #[cfg(not(all(tokio_unstable, feature = "tracing")))]
-        let _ = name;
-
-        let (task, handle) = task::unowned(fut, NoopSchedule);
-        let _ = self.blocking_spawner.spawn(task, &self);
-        handle
+    pub(crate) fn as_inner(&self) -> &HandleInner {
+        self.spawner.as_handle_inner()
     }
 
-    /// Run a future to completion on this `Handle`'s associated `Runtime`.
+    /// Runs a future to completion on this `Handle`'s associated `Runtime`.
     ///
     /// This runs the given future on the current thread, blocking until it is
     /// complete, and yielding its resolved result. Any tasks or timers which
@@ -288,7 +283,12 @@ impl Handle {
     /// [`tokio::fs`]: crate::fs
     /// [`tokio::net`]: crate::net
     /// [`tokio::time`]: crate::time
+    #[track_caller]
     pub fn block_on<F: Future>(&self, future: F) -> F::Output {
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        let future =
+            crate::util::trace::task(future, "block_on", None, super::task::Id::next().as_u64());
+
         // Enter the **runtime** context. This configures spawning, the current I/O driver, ...
         let _rt_enter = self.enter();
 
@@ -306,18 +306,173 @@ impl Handle {
     }
 }
 
-/// Error returned by `try_current` when no Runtime has been started
-pub struct TryCurrentError(());
+impl ToHandle for Handle {
+    fn to_handle(&self) -> Handle {
+        self.clone()
+    }
+}
 
-impl fmt::Debug for TryCurrentError {
+cfg_metrics! {
+    use crate::runtime::RuntimeMetrics;
+
+    impl Handle {
+        /// Returns a view that lets you get information about how the runtime
+        /// is performing.
+        pub fn metrics(&self) -> RuntimeMetrics {
+            RuntimeMetrics::new(self.clone())
+        }
+    }
+}
+
+impl HandleInner {
+    #[track_caller]
+    pub(crate) fn spawn_blocking<F, R>(&self, rt: &dyn ToHandle, func: F) -> JoinHandle<R>
+    where
+        F: FnOnce() -> R + Send + 'static,
+        R: Send + 'static,
+    {
+        let (join_handle, _was_spawned) = if cfg!(debug_assertions)
+            && std::mem::size_of::<F>() > 2048
+        {
+            self.spawn_blocking_inner(Box::new(func), blocking::Mandatory::NonMandatory, None, rt)
+        } else {
+            self.spawn_blocking_inner(func, blocking::Mandatory::NonMandatory, None, rt)
+        };
+
+        join_handle
+    }
+
+    cfg_fs! {
+        #[track_caller]
+        #[cfg_attr(any(
+            all(loom, not(test)), // the function is covered by loom tests
+            test
+        ), allow(dead_code))]
+        pub(crate) fn spawn_mandatory_blocking<F, R>(&self, rt: &dyn ToHandle, func: F) -> Option<JoinHandle<R>>
+        where
+            F: FnOnce() -> R + Send + 'static,
+            R: Send + 'static,
+        {
+            let (join_handle, was_spawned) = if cfg!(debug_assertions) && std::mem::size_of::<F>() > 2048 {
+                self.spawn_blocking_inner(
+                    Box::new(func),
+                    blocking::Mandatory::Mandatory,
+                    None,
+                    rt,
+                )
+            } else {
+                self.spawn_blocking_inner(
+                    func,
+                    blocking::Mandatory::Mandatory,
+                    None,
+                    rt,
+                )
+            };
+
+            if was_spawned {
+                Some(join_handle)
+            } else {
+                None
+            }
+        }
+    }
+
+    #[track_caller]
+    pub(crate) fn spawn_blocking_inner<F, R>(
+        &self,
+        func: F,
+        is_mandatory: blocking::Mandatory,
+        name: Option<&str>,
+        rt: &dyn ToHandle,
+    ) -> (JoinHandle<R>, bool)
+    where
+        F: FnOnce() -> R + Send + 'static,
+        R: Send + 'static,
+    {
+        let fut = BlockingTask::new(func);
+        let id = super::task::Id::next();
+        #[cfg(all(tokio_unstable, feature = "tracing"))]
+        let fut = {
+            use tracing::Instrument;
+            let location = std::panic::Location::caller();
+            let span = tracing::trace_span!(
+                target: "tokio::task::blocking",
+                "runtime.spawn",
+                kind = %"blocking",
+                task.name = %name.unwrap_or_default(),
+                task.id = id.as_u64(),
+                "fn" = %std::any::type_name::<F>(),
+                spawn.location = %format_args!("{}:{}:{}", location.file(), location.line(), location.column()),
+            );
+            fut.instrument(span)
+        };
+
+        #[cfg(not(all(tokio_unstable, feature = "tracing")))]
+        let _ = name;
+
+        let (task, handle) = task::unowned(fut, NoopSchedule, id);
+        let spawned = self
+            .blocking_spawner
+            .spawn(blocking::Task::new(task, is_mandatory), rt);
+        (handle, spawned.is_ok())
+    }
+}
+
+/// Error returned by `try_current` when no Runtime has been started
+#[derive(Debug)]
+pub struct TryCurrentError {
+    kind: TryCurrentErrorKind,
+}
+
+impl TryCurrentError {
+    pub(crate) fn new_no_context() -> Self {
+        Self {
+            kind: TryCurrentErrorKind::NoContext,
+        }
+    }
+
+    pub(crate) fn new_thread_local_destroyed() -> Self {
+        Self {
+            kind: TryCurrentErrorKind::ThreadLocalDestroyed,
+        }
+    }
+
+    /// Returns true if the call failed because there is currently no runtime in
+    /// the Tokio context.
+    pub fn is_missing_context(&self) -> bool {
+        matches!(self.kind, TryCurrentErrorKind::NoContext)
+    }
+
+    /// Returns true if the call failed because the Tokio context thread-local
+    /// had been destroyed. This can usually only happen if in the destructor of
+    /// other thread-locals.
+    pub fn is_thread_local_destroyed(&self) -> bool {
+        matches!(self.kind, TryCurrentErrorKind::ThreadLocalDestroyed)
+    }
+}
+
+enum TryCurrentErrorKind {
+    NoContext,
+    ThreadLocalDestroyed,
+}
+
+impl fmt::Debug for TryCurrentErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TryCurrentError").finish()
+        use TryCurrentErrorKind::*;
+        match self {
+            NoContext => f.write_str("NoContext"),
+            ThreadLocalDestroyed => f.write_str("ThreadLocalDestroyed"),
+        }
     }
 }
 
 impl fmt::Display for TryCurrentError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(CONTEXT_MISSING_ERROR)
+        use TryCurrentErrorKind::*;
+        match self.kind {
+            NoContext => f.write_str(CONTEXT_MISSING_ERROR),
+            ThreadLocalDestroyed => f.write_str(THREAD_LOCAL_DESTROYED_ERROR),
+        }
     }
 }
 

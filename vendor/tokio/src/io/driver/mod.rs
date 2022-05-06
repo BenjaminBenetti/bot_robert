@@ -14,19 +14,23 @@ pub(crate) use registration::Registration;
 mod scheduled_io;
 use scheduled_io::ScheduledIo;
 
+mod metrics;
+
 use crate::park::{Park, Unpark};
 use crate::util::slab::{self, Slab};
 use crate::{loom::sync::Mutex, util::bit};
+
+use metrics::IoDriverMetrics;
 
 use std::fmt;
 use std::io;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 
-/// I/O driver, backed by Mio
+/// I/O driver, backed by Mio.
 pub(crate) struct Driver {
     /// Tracks the number of times `turn` is called. It is safe for this to wrap
-    /// as it is mostly used to determine when to call `compact()`
+    /// as it is mostly used to determine when to call `compact()`.
     tick: u8,
 
     /// Reuse the `mio::Events` value across calls to poll.
@@ -35,22 +39,23 @@ pub(crate) struct Driver {
     /// Primary slab handle containing the state for each resource registered
     /// with this driver. During Drop this is moved into the Inner structure, so
     /// this is an Option to allow it to be vacated (until Drop this is always
-    /// Some)
+    /// Some).
     resources: Option<Slab<ScheduledIo>>,
 
-    /// The system event queue
+    /// The system event queue.
     poll: mio::Poll,
 
     /// State shared between the reactor and the handles.
     inner: Arc<Inner>,
 }
 
-/// A reference to an I/O driver
+/// A reference to an I/O driver.
 #[derive(Clone)]
 pub(crate) struct Handle {
     inner: Weak<Inner>,
 }
 
+#[derive(Debug)]
 pub(crate) struct ReadyEvent {
     tick: u8,
     pub(crate) ready: Ready,
@@ -65,14 +70,16 @@ pub(super) struct Inner {
     /// without risking new ones being registered in the meantime.
     resources: Mutex<Option<Slab<ScheduledIo>>>,
 
-    /// Registers I/O resources
+    /// Registers I/O resources.
     registry: mio::Registry,
 
     /// Allocates `ScheduledIo` handles when creating new resources.
     pub(super) io_dispatch: slab::Allocator<ScheduledIo>,
 
-    /// Used to wake up the reactor from a call to `turn`
+    /// Used to wake up the reactor from a call to `turn`.
     waker: mio::Waker,
+
+    metrics: IoDriverMetrics,
 }
 
 #[derive(Debug, Eq, PartialEq, Clone, Copy)]
@@ -129,6 +136,7 @@ impl Driver {
                 registry,
                 io_dispatch: allocator,
                 waker,
+                metrics: IoDriverMetrics::default(),
             }),
         })
     }
@@ -166,13 +174,17 @@ impl Driver {
         }
 
         // Process all the events that came in, dispatching appropriately
+        let mut ready_count = 0;
         for event in events.iter() {
             let token = event.token();
 
             if token != TOKEN_WAKEUP {
                 self.dispatch(token, Ready::from_mio(event));
+                ready_count += 1;
             }
         }
+
+        self.inner.metrics.incr_ready_count_by(ready_count);
 
         self.events = Some(events);
 
@@ -252,7 +264,7 @@ impl fmt::Debug for Driver {
 
 cfg_rt! {
     impl Handle {
-        /// Returns a handle to the current reactor
+        /// Returns a handle to the current reactor.
         ///
         /// # Panics
         ///
@@ -266,7 +278,7 @@ cfg_rt! {
 
 cfg_not_rt! {
     impl Handle {
-        /// Returns a handle to the current reactor
+        /// Returns a handle to the current reactor.
         ///
         /// # Panics
         ///
@@ -276,6 +288,21 @@ cfg_not_rt! {
             panic!("{}", crate::util::error::CONTEXT_MISSING_ERROR)
         }
     }
+}
+
+cfg_metrics! {
+   impl Handle {
+        // TODO: Remove this when handle contains `Arc<Inner>` so that we can return
+        // &IoDriverMetrics instead of using a closure.
+        //
+        // Related issue: https://github.com/tokio-rs/tokio/issues/4509
+        pub(crate) fn with_io_driver_metrics<F, R>(&self, f: F) -> Option<R>
+        where
+            F: Fn(&IoDriverMetrics) -> R,
+        {
+            self.inner().map(|inner| f(&inner.metrics))
+        }
+   }
 }
 
 impl Handle {
@@ -334,12 +361,18 @@ impl Inner {
         self.registry
             .register(source, mio::Token(token), interest.to_mio())?;
 
+        self.metrics.incr_fd_count();
+
         Ok(shared)
     }
 
     /// Deregisters an I/O resource from the reactor.
     pub(super) fn deregister_source(&self, source: &mut impl mio::event::Source) -> io::Result<()> {
-        self.registry.deregister(source)
+        self.registry.deregister(source)?;
+
+        self.metrics.dec_fd_count();
+
+        Ok(())
     }
 }
 

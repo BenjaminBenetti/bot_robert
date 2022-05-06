@@ -13,7 +13,7 @@ use crate::future::Future;
 use crate::loom::cell::UnsafeCell;
 use crate::runtime::task::raw::{self, Vtable};
 use crate::runtime::task::state::State;
-use crate::runtime::task::Schedule;
+use crate::runtime::task::{Id, Schedule};
 use crate::util::linked_list;
 
 use std::pin::Pin;
@@ -44,26 +44,42 @@ pub(super) struct CoreStage<T: Future> {
 ///
 /// Holds the future or output, depending on the stage of execution.
 pub(super) struct Core<T: Future, S> {
-    /// Scheduler used to drive this future
+    /// Scheduler used to drive this future.
     pub(super) scheduler: S,
 
-    /// Either the future or the output
+    /// Either the future or the output.
     pub(super) stage: CoreStage<T>,
+
+    /// The task's ID, used for populating `JoinError`s.
+    pub(super) task_id: Id,
 }
 
 /// Crate public as this is also needed by the pool.
 #[repr(C)]
 pub(crate) struct Header {
-    /// Task state
+    /// Task state.
     pub(super) state: State,
 
-    pub(crate) owned: UnsafeCell<linked_list::Pointers<Header>>,
+    pub(super) owned: UnsafeCell<linked_list::Pointers<Header>>,
 
-    /// Pointer to next task, used with the injection queue
-    pub(crate) queue_next: UnsafeCell<Option<NonNull<Header>>>,
+    /// Pointer to next task, used with the injection queue.
+    pub(super) queue_next: UnsafeCell<Option<NonNull<Header>>>,
 
     /// Table of function pointers for executing actions on the task.
     pub(super) vtable: &'static Vtable,
+
+    /// This integer contains the id of the OwnedTasks or LocalOwnedTasks that
+    /// this task is stored in. If the task is not in any list, should be the
+    /// id of the list that it was previously in, or zero if it has never been
+    /// in any list.
+    ///
+    /// Once a task has been bound to a list, it can never be bound to another
+    /// list, even if removed from the first list.
+    ///
+    /// The id is not unset when removed from a list because we want to be able
+    /// to read the id without synchronization, even if it is concurrently being
+    /// removed from the list.
+    pub(super) owner_id: UnsafeCell<u64>,
 
     /// The tracing ID for this instrumented task.
     #[cfg(all(tokio_unstable, feature = "tracing"))]
@@ -89,7 +105,7 @@ pub(super) enum Stage<T: Future> {
 impl<T: Future, S: Schedule> Cell<T, S> {
     /// Allocates a new task cell, containing the header, trailer, and core
     /// structures.
-    pub(super) fn new(future: T, scheduler: S, state: State) -> Box<Cell<T, S>> {
+    pub(super) fn new(future: T, scheduler: S, state: State, task_id: Id) -> Box<Cell<T, S>> {
         #[cfg(all(tokio_unstable, feature = "tracing"))]
         let id = future.id();
         Box::new(Cell {
@@ -98,6 +114,7 @@ impl<T: Future, S: Schedule> Cell<T, S> {
                 owned: UnsafeCell::new(linked_list::Pointers::new()),
                 queue_next: UnsafeCell::new(None),
                 vtable: raw::vtable::<T, S>(),
+                owner_id: UnsafeCell::new(0),
                 #[cfg(all(tokio_unstable, feature = "tracing"))]
                 id,
             },
@@ -106,6 +123,7 @@ impl<T: Future, S: Schedule> Cell<T, S> {
                 stage: CoreStage {
                     stage: UnsafeCell::new(Stage::Running(future)),
                 },
+                task_id,
             },
             trailer: Trailer {
                 waker: UnsafeCell::new(None),
@@ -119,7 +137,7 @@ impl<T: Future> CoreStage<T> {
         self.stage.with_mut(f)
     }
 
-    /// Poll the future
+    /// Polls the future.
     ///
     /// # Safety
     ///
@@ -155,7 +173,7 @@ impl<T: Future> CoreStage<T> {
         res
     }
 
-    /// Drop the future
+    /// Drops the future.
     ///
     /// # Safety
     ///
@@ -167,7 +185,7 @@ impl<T: Future> CoreStage<T> {
         }
     }
 
-    /// Store the task output
+    /// Stores the task output.
     ///
     /// # Safety
     ///
@@ -179,7 +197,7 @@ impl<T: Future> CoreStage<T> {
         }
     }
 
-    /// Take the task output
+    /// Takes the task output.
     ///
     /// # Safety
     ///
@@ -203,25 +221,40 @@ impl<T: Future> CoreStage<T> {
 
 cfg_rt_multi_thread! {
     impl Header {
-        pub(crate) unsafe fn set_next(&self, next: Option<NonNull<Header>>) {
+        pub(super) unsafe fn set_next(&self, next: Option<NonNull<Header>>) {
             self.queue_next.with_mut(|ptr| *ptr = next);
         }
     }
 }
 
+impl Header {
+    // safety: The caller must guarantee exclusive access to this field, and
+    // must ensure that the id is either 0 or the id of the OwnedTasks
+    // containing this task.
+    pub(super) unsafe fn set_owner_id(&self, owner: u64) {
+        self.owner_id.with_mut(|ptr| *ptr = owner);
+    }
+
+    pub(super) fn get_owner_id(&self) -> u64 {
+        // safety: If there are concurrent writes, then that write has violated
+        // the safety requirements on `set_owner_id`.
+        unsafe { self.owner_id.with(|ptr| *ptr) }
+    }
+}
+
 impl Trailer {
-    pub(crate) unsafe fn set_waker(&self, waker: Option<Waker>) {
+    pub(super) unsafe fn set_waker(&self, waker: Option<Waker>) {
         self.waker.with_mut(|ptr| {
             *ptr = waker;
         });
     }
 
-    pub(crate) unsafe fn will_wake(&self, waker: &Waker) -> bool {
+    pub(super) unsafe fn will_wake(&self, waker: &Waker) -> bool {
         self.waker
             .with(|ptr| (*ptr).as_ref().unwrap().will_wake(waker))
     }
 
-    pub(crate) fn wake_join(&self) {
+    pub(super) fn wake_join(&self) {
         self.waker.with(|ptr| match unsafe { &*ptr } {
             Some(waker) => waker.wake_by_ref(),
             None => panic!("waker missing"),

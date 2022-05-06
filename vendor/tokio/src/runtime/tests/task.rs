@@ -1,5 +1,5 @@
 use crate::runtime::blocking::NoopSchedule;
-use crate::runtime::task::{self, unowned, JoinHandle, OwnedTasks, Schedule, Task};
+use crate::runtime::task::{self, unowned, Id, JoinHandle, OwnedTasks, Schedule, Task};
 use crate::util::TryLock;
 
 use std::collections::VecDeque;
@@ -55,6 +55,7 @@ fn create_drop1() {
             unreachable!()
         },
         NoopSchedule,
+        Id::next(),
     );
     drop(notified);
     handle.assert_not_dropped();
@@ -71,10 +72,51 @@ fn create_drop2() {
             unreachable!()
         },
         NoopSchedule,
+        Id::next(),
     );
     drop(join);
     handle.assert_not_dropped();
     drop(notified);
+    handle.assert_dropped();
+}
+
+#[test]
+fn drop_abort_handle1() {
+    let (ad, handle) = AssertDrop::new();
+    let (notified, join) = unowned(
+        async {
+            drop(ad);
+            unreachable!()
+        },
+        NoopSchedule,
+        Id::next(),
+    );
+    let abort = join.abort_handle();
+    drop(join);
+    handle.assert_not_dropped();
+    drop(notified);
+    handle.assert_not_dropped();
+    drop(abort);
+    handle.assert_dropped();
+}
+
+#[test]
+fn drop_abort_handle2() {
+    let (ad, handle) = AssertDrop::new();
+    let (notified, join) = unowned(
+        async {
+            drop(ad);
+            unreachable!()
+        },
+        NoopSchedule,
+        Id::next(),
+    );
+    let abort = join.abort_handle();
+    drop(notified);
+    handle.assert_not_dropped();
+    drop(abort);
+    handle.assert_not_dropped();
+    drop(join);
     handle.assert_dropped();
 }
 
@@ -88,6 +130,7 @@ fn create_shutdown1() {
             unreachable!()
         },
         NoopSchedule,
+        Id::next(),
     );
     drop(join);
     handle.assert_not_dropped();
@@ -104,11 +147,18 @@ fn create_shutdown2() {
             unreachable!()
         },
         NoopSchedule,
+        Id::next(),
     );
     handle.assert_not_dropped();
     notified.shutdown();
     handle.assert_dropped();
     drop(join);
+}
+
+#[test]
+fn unowned_poll() {
+    let (task, _) = unowned(async {}, NoopSchedule, Id::next());
+    task.run();
 }
 
 #[test]
@@ -222,7 +272,7 @@ impl Runtime {
         T: 'static + Send + Future,
         T::Output: 'static + Send,
     {
-        let (handle, notified) = self.0.owned.bind(future, self.clone());
+        let (handle, notified) = self.0.owned.bind(future, self.clone(), Id::next());
 
         if let Some(notified) = notified {
             self.schedule(notified);
@@ -241,6 +291,7 @@ impl Runtime {
         while !self.is_empty() && n < max {
             let task = self.next_task();
             n += 1;
+            let task = self.0.owned.assert_owner(task);
             task.run();
         }
 
@@ -258,13 +309,10 @@ impl Runtime {
     fn shutdown(&self) {
         let mut core = self.0.core.try_lock().unwrap();
 
-        self.0.owned.close();
-        while let Some(task) = self.0.owned.pop_back() {
-            task.shutdown();
-        }
+        self.0.owned.close_and_shutdown_all();
 
         while let Some(task) = core.queue.pop_back() {
-            task.shutdown();
+            drop(task);
         }
 
         drop(core);
@@ -275,8 +323,7 @@ impl Runtime {
 
 impl Schedule for Runtime {
     fn release(&self, task: &Task<Self>) -> Option<Task<Self>> {
-        // safety: copying worker.rs
-        unsafe { self.0.owned.remove(task) }
+        self.0.owned.remove(task)
     }
 
     fn schedule(&self, task: task::Notified<Self>) {

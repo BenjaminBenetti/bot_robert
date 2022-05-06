@@ -9,6 +9,7 @@ mod slack_form_payload_transfer;
 mod slack_block_actions_action_transfer;
 mod slack_block_actions_states_transfer;
 mod slack_block_actions_state_transfer;
+mod slack_action_option_transfer;
 
 pub use slash_command_transfer::*;
 pub use slack_response_transfer::*;
@@ -21,3 +22,4 @@ pub use slack_form_payload_transfer::*;
 pub use slack_block_actions_action_transfer::SlackBlockActionsActionTransfer;
 pub use slack_block_actions_states_transfer::SlackBlockActionsStatesTransfer;
 pub use slack_block_actions_state_transfer::SlackBlockActionsStateTransfer;
+pub use slack_action_option_transfer::SlackActionOptionTransfer;

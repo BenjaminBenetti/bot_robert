@@ -49,6 +49,9 @@ fn write_string<W: Write + ?Sized>(writer: &mut W, s: &str) -> Result<()> {
 }
 
 fn write_cstring<W: Write + ?Sized>(writer: &mut W, s: &str) -> Result<()> {
+    if s.contains('\0') {
+        return Err(Error::InvalidCString(s.into()));
+    }
     writer.write_all(s.as_bytes())?;
     writer.write_all(b"\0")?;
     Ok(())
@@ -79,6 +82,7 @@ fn write_f64<W: Write + ?Sized>(writer: &mut W, val: f64) -> Result<()> {
 }
 
 #[cfg(feature = "decimal128")]
+#[allow(deprecated)]
 #[inline]
 fn write_f128<W: Write + ?Sized>(writer: &mut W, val: Decimal128) -> Result<()> {
     let raw = val.to_raw_bytes_le();
@@ -110,8 +114,8 @@ pub(crate) fn serialize_bson<W: Write + ?Sized>(
 
     match *val {
         Bson::Double(v) => write_f64(writer, v),
-        Bson::String(ref v) => write_string(writer, &v),
-        Bson::Array(ref v) => serialize_array(writer, &v),
+        Bson::String(ref v) => write_string(writer, v),
+        Bson::Array(ref v) => serialize_array(writer, v),
         Bson::Document(ref v) => v.to_writer(writer),
         Bson::Boolean(v) => writer
             .write_all(&[if v { 0x01 } else { 0x00 }])
@@ -123,7 +127,7 @@ pub(crate) fn serialize_bson<W: Write + ?Sized>(
             write_cstring(writer, pattern)?;
             write_cstring(writer, options)
         }
-        Bson::JavaScriptCode(ref code) => write_string(writer, &code),
+        Bson::JavaScriptCode(ref code) => write_string(writer, code),
         Bson::ObjectId(ref id) => writer.write_all(&id.bytes()).map_err(From::from),
         Bson::JavaScriptCodeWithScope(JavaScriptCodeWithScope {
             ref code,
@@ -160,7 +164,7 @@ pub(crate) fn serialize_bson<W: Write + ?Sized>(
             (v.timestamp() * 1000) + (v.nanosecond() / 1_000_000) as i64,
         ),
         Bson::Null => Ok(()),
-        Bson::Symbol(ref v) => write_string(writer, &v),
+        Bson::Symbol(ref v) => write_string(writer, v),
         #[cfg(not(feature = "decimal128"))]
         Bson::Decimal128(ref v) => {
             writer.write_all(&v.bytes)?;

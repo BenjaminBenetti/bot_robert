@@ -6,17 +6,14 @@
 // file, which is :(
 #![cfg(feature = "std")]
 
-#[macro_use]
-extern crate tracing;
-mod support;
-
-use self::support::*;
-
 use tracing::{
+    debug, error,
     field::{debug, display},
+    info,
     subscriber::with_default,
-    Level,
+    trace, warn, Level,
 };
+use tracing_mock::*;
 
 macro_rules! event_without_message {
     ($name:ident: $e:expr) => {
@@ -60,8 +57,9 @@ event_without_message! {nonzeroi32_event_without_message: std::num::NonZeroI32::
 #[test]
 fn event_with_message() {
     let (subscriber, handle) = subscriber::mock()
-        .event(event::mock().with_fields(field::mock("message").with_value(
-            &tracing::field::debug(format_args!("hello from my event! yak shaved = {:?}", true)),
+        .event(event::msg(format_args!(
+            "hello from my event! yak shaved = {:?}",
+            true
         )))
         .done()
         .run_with_handle();
@@ -82,12 +80,10 @@ fn message_without_delims() {
                 field::mock("answer")
                     .with_value(&42)
                     .and(field::mock("question").with_value(&"life, the universe, and everything"))
-                    .and(
-                        field::mock("message").with_value(&tracing::field::debug(format_args!(
-                            "hello from my event! tricky? {:?}!",
-                            true
-                        ))),
-                    )
+                    .and(field::msg(format_args!(
+                        "hello from my event! tricky? {:?}!",
+                        true
+                    )))
                     .only(),
             ),
         )
@@ -111,11 +107,7 @@ fn string_message_without_delims() {
                 field::mock("answer")
                     .with_value(&42)
                     .and(field::mock("question").with_value(&"life, the universe, and everything"))
-                    .and(
-                        field::mock("message").with_value(&tracing::field::debug(format_args!(
-                            "hello from my event"
-                        ))),
-                    )
+                    .and(field::msg(format_args!("hello from my event")))
                     .only(),
             ),
         )
@@ -145,6 +137,7 @@ fn one_with_everything() {
                         )))
                         .and(field::mock("foo").with_value(&666))
                         .and(field::mock("bar").with_value(&false))
+                        .and(field::mock("like_a_butterfly").with_value(&42.0))
                         .only(),
                 )
                 .at_level(Level::ERROR)
@@ -154,10 +147,10 @@ fn one_with_everything() {
         .run_with_handle();
 
     with_default(subscriber, || {
-        event!(
+        tracing::event!(
             target: "whatever",
             Level::ERROR,
-            { foo = 666, bar = false },
+            { foo = 666, bar = false, like_a_butterfly = 42.0 },
              "{:#x} make me one with{what:.>20}", 4_277_009_102u64, what = "everything"
         );
     });
@@ -180,7 +173,7 @@ fn moved_field() {
         .run_with_handle();
     with_default(subscriber, || {
         let from = "my event";
-        event!(Level::INFO, foo = display(format!("hello from {}", from)))
+        tracing::event!(Level::INFO, foo = display(format!("hello from {}", from)))
     });
 
     handle.assert_finished();
@@ -201,7 +194,7 @@ fn dotted_field_name() {
         .done()
         .run_with_handle();
     with_default(subscriber, || {
-        event!(Level::INFO, foo.bar = true, foo.baz = false);
+        tracing::event!(Level::INFO, foo.bar = true, foo.baz = false);
     });
 
     handle.assert_finished();
@@ -223,7 +216,7 @@ fn borrowed_field() {
     with_default(subscriber, || {
         let from = "my event";
         let mut message = format!("hello from {}", from);
-        event!(Level::INFO, foo = display(&message));
+        tracing::event!(Level::INFO, foo = display(&message));
         message.push_str(", which happened!");
     });
 
@@ -285,7 +278,7 @@ fn display_shorthand() {
         .done()
         .run_with_handle();
     with_default(subscriber, || {
-        event!(Level::TRACE, my_field = %"hello world");
+        tracing::event!(Level::TRACE, my_field = %"hello world");
     });
 
     handle.assert_finished();
@@ -305,7 +298,7 @@ fn debug_shorthand() {
         .done()
         .run_with_handle();
     with_default(subscriber, || {
-        event!(Level::TRACE, my_field = ?"hello world");
+        tracing::event!(Level::TRACE, my_field = ?"hello world");
     });
 
     handle.assert_finished();
@@ -326,7 +319,7 @@ fn both_shorthands() {
         .done()
         .run_with_handle();
     with_default(subscriber, || {
-        event!(Level::TRACE, display_field = %"hello world", debug_field = ?"hello world");
+        tracing::event!(Level::TRACE, display_field = %"hello world", debug_field = ?"hello world");
     });
 
     handle.assert_finished();
@@ -342,8 +335,8 @@ fn explicit_child() {
         .run_with_handle();
 
     with_default(subscriber, || {
-        let foo = span!(Level::TRACE, "foo");
-        event!(parent: foo.id(), Level::TRACE, "bar");
+        let foo = tracing::span!(Level::TRACE, "foo");
+        tracing::event!(parent: foo.id(), Level::TRACE, "bar");
     });
 
     handle.assert_finished();
@@ -363,12 +356,120 @@ fn explicit_child_at_levels() {
         .run_with_handle();
 
     with_default(subscriber, || {
-        let foo = span!(Level::TRACE, "foo");
+        let foo = tracing::span!(Level::TRACE, "foo");
         trace!(parent: foo.id(), "a");
         debug!(parent: foo.id(), "b");
         info!(parent: foo.id(), "c");
         warn!(parent: foo.id(), "d");
         error!(parent: foo.id(), "e");
+    });
+
+    handle.assert_finished();
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[test]
+fn option_values() {
+    let (subscriber, handle) = subscriber::mock()
+        .event(
+            event::mock().with_fields(
+                field::mock("some_str")
+                    .with_value(&"yes")
+                    .and(field::mock("some_bool").with_value(&true))
+                    .and(field::mock("some_u64").with_value(&42_u64))
+                    .only(),
+            ),
+        )
+        .done()
+        .run_with_handle();
+
+    with_default(subscriber, || {
+        let some_str = Some("yes");
+        let none_str: Option<&'static str> = None;
+        let some_bool = Some(true);
+        let none_bool: Option<bool> = None;
+        let some_u64 = Some(42_u64);
+        let none_u64: Option<u64> = None;
+        trace!(
+            some_str = some_str,
+            none_str = none_str,
+            some_bool = some_bool,
+            none_bool = none_bool,
+            some_u64 = some_u64,
+            none_u64 = none_u64
+        );
+    });
+
+    handle.assert_finished();
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[test]
+fn option_ref_values() {
+    let (subscriber, handle) = subscriber::mock()
+        .event(
+            event::mock().with_fields(
+                field::mock("some_str")
+                    .with_value(&"yes")
+                    .and(field::mock("some_bool").with_value(&true))
+                    .and(field::mock("some_u64").with_value(&42_u64))
+                    .only(),
+            ),
+        )
+        .done()
+        .run_with_handle();
+
+    with_default(subscriber, || {
+        let some_str = &Some("yes");
+        let none_str: &Option<&'static str> = &None;
+        let some_bool = &Some(true);
+        let none_bool: &Option<bool> = &None;
+        let some_u64 = &Some(42_u64);
+        let none_u64: &Option<u64> = &None;
+        trace!(
+            some_str = some_str,
+            none_str = none_str,
+            some_bool = some_bool,
+            none_bool = none_bool,
+            some_u64 = some_u64,
+            none_u64 = none_u64
+        );
+    });
+
+    handle.assert_finished();
+}
+
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
+#[test]
+fn option_ref_mut_values() {
+    let (subscriber, handle) = subscriber::mock()
+        .event(
+            event::mock().with_fields(
+                field::mock("some_str")
+                    .with_value(&"yes")
+                    .and(field::mock("some_bool").with_value(&true))
+                    .and(field::mock("some_u64").with_value(&42_u64))
+                    .only(),
+            ),
+        )
+        .done()
+        .run_with_handle();
+
+    with_default(subscriber, || {
+        let some_str = &mut Some("yes");
+        let none_str: &mut Option<&'static str> = &mut None;
+        let some_bool = &mut Some(true);
+        let none_bool: &mut Option<bool> = &mut None;
+        let some_u64 = &mut Some(42_u64);
+        let none_u64: &mut Option<u64> = &mut None;
+        trace!(
+            some_str = some_str,
+            none_str = none_str,
+            some_bool = some_bool,
+            none_bool = none_bool,
+            some_u64 = some_u64,
+            none_u64 = none_u64
+        );
     });
 
     handle.assert_finished();

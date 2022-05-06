@@ -1,7 +1,7 @@
 use serde::{Serialize, Deserialize};
 use crate::transfer::SlackBlockTransfer;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SlackResponseTransfer {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub channel: Option<String>,

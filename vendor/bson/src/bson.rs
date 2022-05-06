@@ -22,6 +22,7 @@
 //! BSON definition
 
 use std::{
+    convert::{TryFrom, TryInto},
     fmt::{self, Debug, Display},
     ops::{Deref, DerefMut},
 };
@@ -121,7 +122,7 @@ impl Display for Bson {
             }) => write!(fmt, "/{}/{}", pattern, options),
             Bson::JavaScriptCode(ref code)
             | Bson::JavaScriptCodeWithScope(JavaScriptCodeWithScope { ref code, .. }) => {
-                fmt.write_str(&code)
+                fmt.write_str(code)
             }
             Bson::Int32(i) => write!(fmt, "{}", i),
             Bson::Int64(i) => write!(fmt, "{}", i),
@@ -266,13 +267,22 @@ impl From<i64> for Bson {
 
 impl From<u32> for Bson {
     fn from(a: u32) -> Bson {
-        Bson::Int32(a as i32)
+        if let Ok(i) = i32::try_from(a) {
+            Bson::Int32(i)
+        } else {
+            Bson::Int64(a.into())
+        }
     }
 }
 
 impl From<u64> for Bson {
+    /// This conversion is lossy if the provided `u64` is greater than `i64::MAX`, which it will be
+    /// converted to. Using this `From` implementation is highly discouraged and it will be
+    /// removed in the next major version.
+    ///
+    /// Note: due to https://github.com/rust-lang/rust/issues/39935 we cannot deprecate this implementation.
     fn from(a: u64) -> Bson {
-        Bson::Int64(a as i64)
+        Bson::Int64(a.try_into().unwrap_or(i64::MAX))
     }
 }
 
@@ -564,6 +574,15 @@ impl Bson {
                     "$numberDecimal": (v.to_string())
                 }
             }
+            #[cfg(not(feature = "decimal128"))]
+            Bson::Decimal128(ref v) => {
+                doc! {
+                    "$numberDecimalBytes": Bson::Binary(Binary {
+                        bytes: v.bytes.to_vec(),
+                        subtype: BinarySubtype::Generic,
+                    }).to_extended_document()
+                }
+            }
             Bson::Undefined => {
                 doc! {
                     "$undefined": true,
@@ -652,6 +671,16 @@ impl Bson {
                 if let Ok(d) = doc.get_str("$numberDecimal") {
                     if let Ok(d) = d.parse() {
                         return Bson::Decimal128(d);
+                    }
+                }
+            }
+
+            #[cfg(not(feature = "decimal128"))]
+            ["$numberDecimalBytes"] => {
+                if let Ok(d) = doc.get_binary_generic("$numberDecimalBytes") {
+                    let boxed_slice = d.clone().into_boxed_slice();
+                    if let Ok(ba) = Box::<[u8; 128 / 8]>::try_from(boxed_slice) {
+                        return Bson::Decimal128(Decimal128 { bytes: *ba });
                     }
                 }
             }

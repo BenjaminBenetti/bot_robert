@@ -6,13 +6,16 @@ use std::time::Instant;
 
 #[post("/api/slack/action")]
 pub async fn inbound_slack_action(slack_payload: Form<SlackFormPayloadTransfer>) -> impl Responder {
+    println!("Inbound action data from slack: \n {}", slack_payload.payload);
     // Slack will send multiple different requests to this endpoint.
     let now = Instant::now();
 
     match bot_robert_lib::slash_command::process_action(&slack_payload).await {
         Ok((res, url)) => {
             if let Some(url) = url {
-                send_reply_to_slack(&res, &url).await;
+                if let Some(res) = res {
+                    send_reply_to_slack(&res, &url).await;
+                }
             }
             println!("Inbound slack action processed in: {}ms", now.elapsed().as_millis());
             HttpResponse::Ok()

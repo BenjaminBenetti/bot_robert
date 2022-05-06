@@ -4,6 +4,7 @@ use mio::event::Source;
 use std::fmt;
 use std::io;
 use std::ops::Deref;
+use std::panic::{RefUnwindSafe, UnwindSafe};
 
 cfg_io_driver! {
     /// Associates an I/O resource that implements the [`std::io::Read`] and/or
@@ -113,7 +114,7 @@ impl<E: Source> PollEvented<E> {
         })
     }
 
-    /// Returns a reference to the registration
+    /// Returns a reference to the registration.
     #[cfg(any(
         feature = "net",
         all(unix, feature = "process"),
@@ -123,7 +124,7 @@ impl<E: Source> PollEvented<E> {
         &self.registration
     }
 
-    /// Deregister the inner io from the registration and returns a Result containing the inner io
+    /// Deregisters the inner io from the registration and returns a Result containing the inner io.
     #[cfg(any(feature = "net", feature = "process"))]
     pub(crate) fn into_inner(mut self) -> io::Result<E> {
         let mut inner = self.io.take().unwrap(); // As io shouldn't ever be None, just unwrap here.
@@ -184,6 +185,10 @@ feature! {
         }
     }
 }
+
+impl<E: Source> UnwindSafe for PollEvented<E> {}
+
+impl<E: Source> RefUnwindSafe for PollEvented<E> {}
 
 impl<E: Source> Deref for PollEvented<E> {
     type Target = E;

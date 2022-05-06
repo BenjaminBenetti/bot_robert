@@ -1,10 +1,11 @@
-use crate::runtime::task::RawTask;
+use crate::runtime::task::{Id, RawTask};
 
 use std::fmt;
 use std::future::Future;
 use std::marker::PhantomData;
+use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, Waker};
 
 cfg_rt! {
     /// An owned permission to join on a task (await its termination).
@@ -143,6 +144,7 @@ cfg_rt! {
     /// [`JoinError`]: crate::task::JoinError
     pub struct JoinHandle<T> {
         raw: Option<RawTask>,
+        id: Id,
         _p: PhantomData<T>,
     }
 }
@@ -150,10 +152,14 @@ cfg_rt! {
 unsafe impl<T: Send> Send for JoinHandle<T> {}
 unsafe impl<T: Send> Sync for JoinHandle<T> {}
 
+impl<T> UnwindSafe for JoinHandle<T> {}
+impl<T> RefUnwindSafe for JoinHandle<T> {}
+
 impl<T> JoinHandle<T> {
-    pub(super) fn new(raw: RawTask) -> JoinHandle<T> {
+    pub(super) fn new(raw: RawTask, id: Id) -> JoinHandle<T> {
         JoinHandle {
             raw: Some(raw),
+            id,
             _p: PhantomData,
         }
     }
@@ -162,7 +168,7 @@ impl<T> JoinHandle<T> {
     ///
     /// Awaiting a cancelled task might complete as usual if the task was
     /// already completed at the time it was cancelled, but most likely it
-    /// will complete with a `Err(JoinError::Cancelled)`.
+    /// will fail with a [cancelled] `JoinError`.
     ///
     /// ```rust
     /// use tokio::time;
@@ -190,10 +196,46 @@ impl<T> JoinHandle<T> {
     ///    }
     /// }
     /// ```
+    /// [cancelled]: method@super::error::JoinError::is_cancelled
     pub fn abort(&self) {
         if let Some(raw) = self.raw {
             raw.remote_abort();
         }
+    }
+
+    /// Set the waker that is notified when the task completes.
+    pub(crate) fn set_join_waker(&mut self, waker: &Waker) {
+        if let Some(raw) = self.raw {
+            if raw.try_set_join_waker(waker) {
+                // In this case the task has already completed. We wake the waker immediately.
+                waker.wake_by_ref();
+            }
+        }
+    }
+
+    /// Returns a new `AbortHandle` that can be used to remotely abort this task.
+    #[cfg(any(tokio_unstable, test))]
+    pub(crate) fn abort_handle(&self) -> super::AbortHandle {
+        let raw = self.raw.map(|raw| {
+            raw.ref_inc();
+            raw
+        });
+        super::AbortHandle::new(raw, self.id.clone())
+    }
+
+    /// Returns a [task ID] that uniquely identifies this task relative to other
+    /// currently spawned tasks.
+    ///
+    /// **Note**: This is an [unstable API][unstable]. The public API of this type
+    /// may break in 1.x releases. See [the documentation on unstable
+    /// features][unstable] for details.
+    ///
+    /// [task ID]: crate::task::Id
+    /// [unstable]: crate#unstable-features
+    #[cfg(tokio_unstable)]
+    #[cfg_attr(docsrs, doc(cfg(tokio_unstable)))]
+    pub fn id(&self) -> super::Id {
+        self.id.clone()
     }
 }
 
@@ -255,6 +297,8 @@ where
     T: fmt::Debug,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("JoinHandle").finish()
+        fmt.debug_struct("JoinHandle")
+            .field("id", &self.id)
+            .finish()
     }
 }

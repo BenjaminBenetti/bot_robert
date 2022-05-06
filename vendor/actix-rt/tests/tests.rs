@@ -1,15 +1,15 @@
 use std::{
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        mpsc::channel,
-        Arc,
-    },
-    thread,
+    future::Future,
     time::{Duration, Instant},
 };
 
-use actix_rt::{Arbiter, System};
-use tokio::sync::oneshot;
+use actix_rt::{task::JoinError, Arbiter, System};
+
+#[cfg(not(feature = "io-uring"))]
+use {
+    std::{sync::mpsc::channel, thread},
+    tokio::sync::oneshot,
+};
 
 #[test]
 fn await_for_timer() {
@@ -22,6 +22,15 @@ fn await_for_timer() {
         instant.elapsed() >= time,
         "Block on should poll awaited future to completion"
     );
+}
+
+#[cfg(not(feature = "io-uring"))]
+#[test]
+fn run_with_code() {
+    let sys = System::new();
+    System::current().stop_with_code(42);
+    let exit_code = sys.run_with_code().expect("system stop should not error");
+    assert_eq!(exit_code, 42);
 }
 
 #[test]
@@ -99,13 +108,17 @@ fn wait_for_spawns() {
 
     let handle = rt.spawn(async {
         println!("running on the runtime");
-        // assertion panic is caught at task boundary
-        assert_eq!(1, 2);
+        // panic is caught at task boundary
+        panic!("intentional test panic");
     });
 
     assert!(rt.block_on(handle).is_err());
 }
 
+// Temporary disabled tests for io-uring feature.
+// They should be enabled when possible.
+
+#[cfg(not(feature = "io-uring"))]
 #[test]
 fn arbiter_spawn_fn_runs() {
     let _ = System::new();
@@ -122,6 +135,7 @@ fn arbiter_spawn_fn_runs() {
     arbiter.join().unwrap();
 }
 
+#[cfg(not(feature = "io-uring"))]
 #[test]
 fn arbiter_handle_spawn_fn_runs() {
     let sys = System::new();
@@ -144,6 +158,7 @@ fn arbiter_handle_spawn_fn_runs() {
     sys.run().unwrap();
 }
 
+#[cfg(not(feature = "io-uring"))]
 #[test]
 fn arbiter_drop_no_panic_fn() {
     let _ = System::new();
@@ -155,6 +170,7 @@ fn arbiter_drop_no_panic_fn() {
     arbiter.join().unwrap();
 }
 
+#[cfg(not(feature = "io-uring"))]
 #[test]
 fn arbiter_drop_no_panic_fut() {
     let _ = System::new();
@@ -166,18 +182,7 @@ fn arbiter_drop_no_panic_fut() {
     arbiter.join().unwrap();
 }
 
-#[test]
-#[should_panic]
-fn no_system_current_panic() {
-    System::current();
-}
-
-#[test]
-#[should_panic]
-fn no_system_arbiter_new_panic() {
-    Arbiter::new();
-}
-
+#[cfg(not(feature = "io-uring"))]
 #[test]
 fn system_arbiter_spawn() {
     let runner = System::new();
@@ -208,6 +213,7 @@ fn system_arbiter_spawn() {
     thread.join().unwrap();
 }
 
+#[cfg(not(feature = "io-uring"))]
 #[test]
 fn system_stop_stops_arbiters() {
     let sys = System::new();
@@ -220,8 +226,8 @@ fn system_stop_stops_arbiters() {
     System::current().stop();
     sys.run().unwrap();
 
-    // account for slightly slow thread de-spawns (only observed on windows)
-    thread::sleep(Duration::from_millis(100));
+    // account for slightly slow thread de-spawns
+    thread::sleep(Duration::from_millis(500));
 
     // arbiter should be dead and return false
     assert!(!Arbiter::current().spawn_fn(|| {}));
@@ -230,6 +236,7 @@ fn system_stop_stops_arbiters() {
     arb.join().unwrap();
 }
 
+#[cfg(not(feature = "io-uring"))]
 #[test]
 fn new_system_with_tokio() {
     let (tx, rx) = channel();
@@ -262,8 +269,14 @@ fn new_system_with_tokio() {
     assert_eq!(rx.recv().unwrap(), 42);
 }
 
+#[cfg(not(feature = "io-uring"))]
 #[test]
 fn new_arbiter_with_tokio() {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+
     let _ = System::new();
 
     let arb = Arbiter::with_tokio_rt(|| {
@@ -286,7 +299,19 @@ fn new_arbiter_with_tokio() {
 
     arb.join().unwrap();
 
-    assert_eq!(false, counter.load(Ordering::SeqCst));
+    assert!(!counter.load(Ordering::SeqCst));
+}
+
+#[test]
+#[should_panic]
+fn no_system_current_panic() {
+    System::current();
+}
+
+#[test]
+#[should_panic]
+fn no_system_arbiter_new_panic() {
+    Arbiter::new();
 }
 
 #[test]
@@ -297,4 +322,56 @@ fn try_current_no_system() {
 #[test]
 fn try_current_with_system() {
     System::new().block_on(async { assert!(System::try_current().is_some()) });
+}
+
+#[allow(clippy::unit_cmp)]
+#[test]
+fn spawn_local() {
+    System::new().block_on(async {
+        // demonstrate that spawn -> R is strictly more capable than spawn -> ()
+
+        assert_eq!(actix_rt::spawn(async {}).await.unwrap(), ());
+        assert_eq!(actix_rt::spawn(async { 1 }).await.unwrap(), 1);
+        assert!(actix_rt::spawn(async { panic!("") }).await.is_err());
+
+        actix_rt::spawn(async { tokio::time::sleep(Duration::from_millis(50)).await })
+            .await
+            .unwrap();
+
+        fn g<F: Future<Output = Result<(), JoinError>>>(_f: F) {}
+        g(actix_rt::spawn(async {}));
+        // g(actix_rt::spawn(async { 1 })); // compile err
+
+        fn h<F: Future<Output = Result<R, JoinError>>, R>(_f: F) {}
+        h(actix_rt::spawn(async {}));
+        h(actix_rt::spawn(async { 1 }));
+    })
+}
+
+#[cfg(all(target_os = "linux", feature = "io-uring"))]
+#[test]
+fn tokio_uring_arbiter() {
+    System::new().block_on(async {
+        let (tx, rx) = std::sync::mpsc::channel();
+
+        Arbiter::new().spawn(async move {
+            let handle = actix_rt::spawn(async move {
+                let f = tokio_uring::fs::File::create("test.txt").await.unwrap();
+                let buf = b"Hello World!";
+
+                let (res, _) = f.write_at(&buf[..], 0).await;
+                assert!(res.is_ok());
+
+                f.sync_all().await.unwrap();
+                f.close().await.unwrap();
+
+                std::fs::remove_file("test.txt").unwrap();
+            });
+
+            handle.await.unwrap();
+            tx.send(true).unwrap();
+        });
+
+        assert!(rx.recv().unwrap());
+    })
 }

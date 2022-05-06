@@ -300,6 +300,12 @@ cfg_rt! {
     mod unconstrained;
     pub use unconstrained::{unconstrained, Unconstrained};
 
+    cfg_unstable! {
+        mod join_set;
+        pub use join_set::JoinSet;
+        pub use crate::runtime::task::{Id, AbortHandle};
+    }
+
     cfg_trace! {
         mod builder;
         pub use builder::Builder;

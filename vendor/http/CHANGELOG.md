@@ -1,3 +1,20 @@
+# 0.2.7 (April 28, 2022)
+
+* Add `extend()` method to `Extensions`.
+* Add `From<Authority>` and `From<PathAndQuery>` impls for `Uri`.
+* Make `HeaderName::from_static` a `const fn`.
+
+# 0.2.6 (December 30, 2021)
+
+* Upgrade internal `itoa` dependency to 1.0.
+
+# 0.2.5 (September 21, 2021)
+
+* Add `is_empty()` and `len()` methods to `Extensions`.
+* Add `version_ref()` method to `request::Builder`.
+* Implement `TryFrom<Vec<u8>>` and `TryFrom<String>` for `Authority`, `Uri`, `PathAndQuery`, and `HeaderName`.
+* Make `HeaderValue::from_static` a `const fn`.
+
 # 0.2.4 (April 4, 2021)
 
 * Fix `Uri` parsing to allow `{`, `"`, and `}` in paths.

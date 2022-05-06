@@ -10,8 +10,8 @@ use crate::{field, Metadata};
 /// the [`new_span`] trait method. See the documentation for that method for
 /// more information on span ID generation.
 ///
-/// [`Subscriber`]: ../subscriber/trait.Subscriber.html
-/// [`new_span`]: ../subscriber/trait.Subscriber.html#method.new_span
+/// [`Subscriber`]: super::subscriber::Subscriber
+/// [`new_span`]: super::subscriber::Subscriber::new_span
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Id(NonZeroU64);
 
@@ -38,9 +38,9 @@ pub struct Record<'a> {
 /// - "none", indicating that the current context is known to not be in a span,
 /// - "some", with the current span's [`Id`] and [`Metadata`].
 ///
-/// [the `Subscriber` considers]: ../subscriber/trait.Subscriber.html#method.current_span
-/// [`Id`]: struct.Id.html
-/// [`Metadata`]: ../metadata/struct.Metadata.html
+/// [the `Subscriber` considers]: super::subscriber::Subscriber::current_span
+/// [`Id`]: Id
+/// [`Metadata`]: super::metadata::Metadata
 #[derive(Debug)]
 pub struct Current {
     inner: CurrentInner,
@@ -61,15 +61,12 @@ enum CurrentInner {
 impl Id {
     /// Constructs a new span ID from the given `u64`.
     ///
-    /// <div class="information">
-    ///     <div class="tooltip ignore" style="">ⓘ<span class="tooltiptext">Note</span></div>
-    /// </div>
-    /// <div class="example-wrap" style="display:inline-block">
     /// <pre class="ignore" style="white-space:normal;font:inherit;">
-    /// <strong>Note</strong>: Span IDs must be greater than zero.</pre></div>
+    ///     <strong>Note</strong>: Span IDs must be greater than zero.
+    /// </pre>
     ///
     /// # Panics
-    /// - If the provided `u64` is 0
+    /// - If the provided `u64` is 0.
     pub fn from_u64(u: u64) -> Self {
         Id(NonZeroU64::new(u).expect("span IDs must be > 0"))
     }
@@ -171,7 +168,7 @@ impl<'a> Attributes<'a> {
     /// Returns the new span's explicitly-specified parent, if there is one.
     ///
     /// Otherwise (if the new span is a root or is a child of the current span),
-    /// returns false.
+    /// returns `None`.
     pub fn parent(&self) -> Option<&Id> {
         match self.parent {
             Parent::Explicit(ref p) => Some(p),
@@ -182,7 +179,7 @@ impl<'a> Attributes<'a> {
     /// Records all the fields in this set of `Attributes` with the provided
     /// [Visitor].
     ///
-    /// [visitor]: ../field/trait.Visit.html
+    /// [visitor]: super::field::Visit
     pub fn record(&self, visitor: &mut dyn field::Visit) {
         self.values.record(visitor)
     }
@@ -224,7 +221,7 @@ impl<'a> Record<'a> {
 
     /// Records all the fields in this `Record` with the provided [Visitor].
     ///
-    /// [visitor]: ../field/trait.Visit.html
+    /// [visitor]: super::field::Visit
     pub fn record(&self, visitor: &mut dyn field::Visit) {
         self.values.record(visitor)
     }
@@ -303,7 +300,7 @@ impl Current {
     /// Borrows the `Metadata` of the current span, if one exists and is known.
     pub fn metadata(&self) -> Option<&'static Metadata<'static>> {
         match self.inner {
-            CurrentInner::Current { ref metadata, .. } => Some(*metadata),
+            CurrentInner::Current { metadata, .. } => Some(metadata),
             _ => None,
         }
     }

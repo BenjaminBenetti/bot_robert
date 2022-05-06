@@ -42,6 +42,7 @@ async fn get_command_processors() -> Vec<Box<dyn CommandHandler>> {
         Box::new(FixedResponseHandler::new(&String::from("source"),
                                   &SlackResponse::from_string(&String::from("https://github.com/CanadianCommander/bot_robert")))),
         Box::new(SimpleRandomResponseHandler::new(&String::from("joke"), &jokes::jokes_as_slack_responses().await)),
-        Box::new(FixedResponseHandler::new(&String::from("joke-add"), &slack_response_factory::joke_add_response()))
+        Box::new(FixedResponseHandler::new(&String::from("joke-add"), &slack_response_factory::joke_add_response())),
+        Box::new(FixedResponseHandler::new(&"lunch-add".to_string(),&slack_response_factory::lunch_add_response(true, true, true, true, true)))
     )
 }

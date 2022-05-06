@@ -1,5 +1,5 @@
 use serde::{Serialize, Deserialize};
-use crate::transfer::SlackTextTransfer;
+use crate::transfer::{SlackTextTransfer, SlackActionOptionTransfer};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SlackBlockActionsActionTransfer {
@@ -9,4 +9,5 @@ pub struct SlackBlockActionsActionTransfer {
     pub block_id: String,
     pub value: Option<String>,
     pub text: Option<SlackTextTransfer>,
+    pub selected_options: Option<Vec<SlackActionOptionTransfer>>,
 }

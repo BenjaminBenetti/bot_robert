@@ -2,6 +2,9 @@
 #![warn(rust_2018_idioms)]
 #![cfg(feature = "sync")]
 
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
+
 use tokio::sync::broadcast;
 use tokio_test::task;
 use tokio_test::{
@@ -273,12 +276,14 @@ fn send_no_rx() {
 
 #[test]
 #[should_panic]
+#[cfg(not(target_arch = "wasm32"))] // wasm currently doesn't support unwinding
 fn zero_capacity() {
     broadcast::channel::<()>(0);
 }
 
 #[test]
 #[should_panic]
+#[cfg(not(target_arch = "wasm32"))] // wasm currently doesn't support unwinding
 fn capacity_too_big() {
     use std::usize;
 
@@ -286,6 +291,7 @@ fn capacity_too_big() {
 }
 
 #[test]
+#[cfg(not(target_arch = "wasm32"))] // wasm currently doesn't support unwinding
 fn panic_in_clone() {
     use std::panic::{self, AssertUnwindSafe};
 
@@ -449,6 +455,25 @@ fn lagging_receiver_recovers_after_wrap_open() {
     assert_eq!(assert_recv!(rx), 2);
     assert_eq!(assert_recv!(rx), 3);
     assert_empty!(rx);
+}
+
+#[test]
+fn receiver_len_with_lagged() {
+    let (tx, mut rx) = broadcast::channel(3);
+
+    tx.send(10).unwrap();
+    tx.send(20).unwrap();
+    tx.send(30).unwrap();
+    tx.send(40).unwrap();
+
+    assert_eq!(rx.len(), 4);
+    assert_eq!(assert_recv!(rx), 10);
+
+    tx.send(50).unwrap();
+    tx.send(60).unwrap();
+
+    assert_eq!(rx.len(), 5);
+    assert_lagged!(rx.try_recv(), 1);
 }
 
 fn is_closed(err: broadcast::error::RecvError) -> bool {

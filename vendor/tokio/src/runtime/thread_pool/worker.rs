@@ -63,10 +63,10 @@ use crate::loom::sync::{Arc, Mutex};
 use crate::park::{Park, Unpark};
 use crate::runtime;
 use crate::runtime::enter::EnterContext;
-use crate::runtime::park::{Parker, Unparker};
 use crate::runtime::task::{Inject, JoinHandle, OwnedTasks};
-use crate::runtime::thread_pool::{AtomicCell, Idle};
-use crate::runtime::{queue, task};
+use crate::runtime::thread_pool::{queue, Idle, Parker, Unparker};
+use crate::runtime::{task, Callback, HandleInner, MetricsBatch, SchedulerMetrics, WorkerMetrics};
+use crate::util::atomic_cell::AtomicCell;
 use crate::util::FastRand;
 
 use std::cell::RefCell;
@@ -112,17 +112,25 @@ struct Core {
     /// borrow checker happy.
     park: Option<Parker>,
 
+    /// Batching metrics so they can be submitted to RuntimeMetrics.
+    metrics: MetricsBatch,
+
     /// Fast random number generator.
     rand: FastRand,
 }
 
 /// State shared across all workers
 pub(super) struct Shared {
+    /// Handle to the I/O driver, timer, blocking spawner, ...
+    handle_inner: HandleInner,
+
     /// Per-worker remote state. All other workers have access to this and is
     /// how they communicate between each other.
     remotes: Box<[Remote]>,
 
-    /// Submit work to the scheduler while **not** currently on a worker thread.
+    /// Global task queue used for:
+    ///  1. Submit work to the scheduler while **not** currently on a worker thread.
+    ///  2. Submit work to the scheduler when a worker run queue is saturated
     inject: Inject<Arc<Shared>>,
 
     /// Coordinates idle workers
@@ -137,11 +145,21 @@ pub(super) struct Shared {
     /// stolen by a thread that was spawned as part of `block_in_place`.
     #[allow(clippy::vec_box)] // we're moving an already-boxed value
     shutdown_cores: Mutex<Vec<Box<Core>>>,
+
+    /// Callback for a worker parking itself
+    before_park: Option<Callback>,
+    /// Callback for a worker unparking itself
+    after_unpark: Option<Callback>,
+
+    /// Collects metrics from the runtime.
+    pub(super) scheduler_metrics: SchedulerMetrics,
+
+    pub(super) worker_metrics: Box<[WorkerMetrics]>,
 }
 
 /// Used to communicate with a worker from other threads.
 struct Remote {
-    /// Steal tasks from this worker.
+    /// Steals tasks from this worker.
     steal: queue::Steal<Arc<Shared>>,
 
     /// Unparks the associated worker thread
@@ -174,9 +192,16 @@ type Notified = task::Notified<Arc<Shared>>;
 // Tracks thread-local state
 scoped_thread_local!(static CURRENT: Context);
 
-pub(super) fn create(size: usize, park: Parker) -> (Arc<Shared>, Launch) {
-    let mut cores = vec![];
-    let mut remotes = vec![];
+pub(super) fn create(
+    size: usize,
+    park: Parker,
+    handle_inner: HandleInner,
+    before_park: Option<Callback>,
+    after_unpark: Option<Callback>,
+) -> (Arc<Shared>, Launch) {
+    let mut cores = Vec::with_capacity(size);
+    let mut remotes = Vec::with_capacity(size);
+    let mut worker_metrics = Vec::with_capacity(size);
 
     // Create the local queues
     for _ in 0..size {
@@ -192,18 +217,25 @@ pub(super) fn create(size: usize, park: Parker) -> (Arc<Shared>, Launch) {
             is_searching: false,
             is_shutdown: false,
             park: Some(park),
+            metrics: MetricsBatch::new(),
             rand: FastRand::new(seed()),
         }));
 
         remotes.push(Remote { steal, unpark });
+        worker_metrics.push(WorkerMetrics::new());
     }
 
     let shared = Arc::new(Shared {
+        handle_inner,
         remotes: remotes.into_boxed_slice(),
         inject: Inject::new(),
         idle: Idle::new(size),
         owned: OwnedTasks::new(),
         shutdown_cores: Mutex::new(vec![]),
+        before_park,
+        after_unpark,
+        scheduler_metrics: SchedulerMetrics::new(),
+        worker_metrics: worker_metrics.into_boxed_slice(),
     });
 
     let mut launch = Launch(vec![]);
@@ -384,11 +416,14 @@ impl Context {
     }
 
     fn run_task(&self, task: Notified, mut core: Box<Core>) -> RunResult {
+        let task = self.worker.shared.owned.assert_owner(task);
+
         // Make sure the worker is not in the **searching** state. This enables
         // another idle worker to try to steal work.
         core.transition_from_searching(&self.worker);
 
         // Make the core available to the runtime context
+        core.metrics.incr_poll_count();
         *self.core.borrow_mut() = Some(core);
 
         // Run the task
@@ -413,12 +448,15 @@ impl Context {
 
                 if coop::has_budget_remaining() {
                     // Run the LIFO task, then loop
+                    core.metrics.incr_poll_count();
                     *self.core.borrow_mut() = Some(core);
+                    let task = self.worker.shared.owned.assert_owner(task);
                     task.run();
                 } else {
                     // Not enough budget left to run the LIFO task, push it to
                     // the back of the queue and return.
-                    core.run_queue.push_back(task, self.worker.inject());
+                    core.run_queue
+                        .push_back(task, self.worker.inject(), &mut core.metrics);
                     return Ok(core);
                 }
             }
@@ -438,20 +476,40 @@ impl Context {
         core
     }
 
+    /// Parks the worker thread while waiting for tasks to execute.
+    ///
+    /// This function checks if indeed there's no more work left to be done before parking.
+    /// Also important to notice that, before parking, the worker thread will try to take
+    /// ownership of the Driver (IO/Time) and dispatch any events that might have fired.
+    /// Whenever a worker thread executes the Driver loop, all waken tasks are scheduled
+    /// in its own local queue until the queue saturates (ntasks > LOCAL_QUEUE_CAPACITY).
+    /// When the local queue is saturated, the overflow tasks are added to the injection queue
+    /// from where other workers can pick them up.
+    /// Also, we rely on the workstealing algorithm to spread the tasks amongst workers
+    /// after all the IOs get dispatched
     fn park(&self, mut core: Box<Core>) -> Box<Core> {
-        core.transition_to_parked(&self.worker);
+        if let Some(f) = &self.worker.shared.before_park {
+            f();
+        }
 
-        while !core.is_shutdown {
-            core = self.park_timeout(core, None);
+        if core.transition_to_parked(&self.worker) {
+            while !core.is_shutdown {
+                core.metrics.about_to_park();
+                core = self.park_timeout(core, None);
+                core.metrics.returned_from_park();
 
-            // Run regularly scheduled maintenance
-            core.maintenance(&self.worker);
+                // Run regularly scheduled maintenance
+                core.maintenance(&self.worker);
 
-            if core.transition_from_parked(&self.worker) {
-                return core;
+                if core.transition_from_parked(&self.worker) {
+                    break;
+                }
             }
         }
 
+        if let Some(f) = &self.worker.shared.after_unpark {
+            f();
+        }
         core
     }
 
@@ -475,8 +533,9 @@ impl Context {
         // Place `park` back in `core`
         core.park = Some(park);
 
-        // If there are tasks available to steal, notify a worker
-        if core.run_queue.is_stealable() {
+        // If there are tasks available to steal, but this worker is not
+        // looking for tasks to steal, notify another worker.
+        if !core.is_searching && core.run_queue.is_stealable() {
             self.worker.shared.notify_parked();
         }
 
@@ -503,6 +562,11 @@ impl Core {
         self.lifo_slot.take().or_else(|| self.run_queue.pop())
     }
 
+    /// Function responsible for stealing tasks from another worker
+    ///
+    /// Note: Only if less than half the workers are searching for tasks to steal
+    /// a new worker will actually try to steal. The idea is to make sure not all
+    /// workers will be trying to steal at the same time.
     fn steal_work(&mut self, worker: &Worker) -> Option<Notified> {
         if !self.transition_to_searching(worker) {
             return None;
@@ -521,7 +585,10 @@ impl Core {
             }
 
             let target = &worker.shared.remotes[i];
-            if let Some(task) = target.steal.steal_into(&mut self.run_queue) {
+            if let Some(task) = target
+                .steal
+                .steal_into(&mut self.run_queue, &mut self.metrics)
+            {
                 return Some(task);
             }
         }
@@ -547,8 +614,15 @@ impl Core {
         worker.shared.transition_worker_from_searching();
     }
 
-    /// Prepare the worker state for parking
-    fn transition_to_parked(&mut self, worker: &Worker) {
+    /// Prepares the worker state for parking.
+    ///
+    /// Returns true if the transition happened, false if there is work to do first.
+    fn transition_to_parked(&mut self, worker: &Worker) -> bool {
+        // Workers should not park if they have work to do
+        if self.lifo_slot.is_some() || self.run_queue.has_tasks() {
+            return false;
+        }
+
         // When the final worker transitions **out** of searching to parked, it
         // must check all the queues one last time in case work materialized
         // between the last work scan and transitioning out of searching.
@@ -564,6 +638,8 @@ impl Core {
         if is_last_searcher {
             worker.shared.notify_if_work_pending();
         }
+
+        true
     }
 
     /// Returns `true` if the transition happened.
@@ -571,8 +647,11 @@ impl Core {
         // If a task is in the lifo slot, then we must unpark regardless of
         // being notified
         if self.lifo_slot.is_some() {
-            worker.shared.idle.unpark_worker_by_id(worker.index);
-            self.is_searching = true;
+            // When a worker wakes, it should only transition to the "searching"
+            // state when the wake originates from another worker *or* a new task
+            // is pushed. We do *not* want the worker to transition to "searching"
+            // when it wakes when the I/O driver receives new events.
+            self.is_searching = !worker.shared.idle.unpark_worker_by_id(worker.index);
             return true;
         }
 
@@ -587,6 +666,9 @@ impl Core {
 
     /// Runs maintenance work such as checking the pool's state.
     fn maintenance(&mut self, worker: &Worker) {
+        self.metrics
+            .submit(&worker.shared.worker_metrics[worker.index]);
+
         if !self.is_shutdown {
             // Check if the scheduler has been shutdown
             self.is_shutdown = worker.inject().is_closed();
@@ -596,16 +678,14 @@ impl Core {
     /// Signals all tasks to shut down, and waits for them to complete. Must run
     /// before we enter the single-threaded phase of shutdown processing.
     fn pre_shutdown(&mut self, worker: &Worker) {
-        // The OwnedTasks was closed in Shared::close.
-        debug_assert!(worker.shared.owned.is_closed());
-
         // Signal to all tasks to shut down.
-        while let Some(header) = worker.shared.owned.pop_back() {
-            header.shutdown();
-        }
+        worker.shared.owned.close_and_shutdown_all();
+
+        self.metrics
+            .submit(&worker.shared.worker_metrics[worker.index]);
     }
 
-    /// Shutdown the core
+    /// Shuts down the core.
     fn shutdown(&mut self) {
         // Take the core
         let mut park = self.park.take().expect("park missing");
@@ -618,7 +698,7 @@ impl Core {
 }
 
 impl Worker {
-    /// Returns a reference to the scheduler's injection queue
+    /// Returns a reference to the scheduler's injection queue.
     fn inject(&self) -> &Inject<Arc<Shared>> {
         &self.shared.inject
     }
@@ -626,8 +706,7 @@ impl Worker {
 
 impl task::Schedule for Arc<Shared> {
     fn release(&self, task: &Task) -> Option<Task> {
-        // SAFETY: Inserted into owned in bind.
-        unsafe { self.owned.remove(task) }
+        self.owned.remove(task)
     }
 
     fn schedule(&self, task: Notified) {
@@ -640,12 +719,20 @@ impl task::Schedule for Arc<Shared> {
 }
 
 impl Shared {
-    pub(super) fn bind_new_task<T>(me: &Arc<Self>, future: T) -> JoinHandle<T::Output>
+    pub(crate) fn as_handle_inner(&self) -> &HandleInner {
+        &self.handle_inner
+    }
+
+    pub(super) fn bind_new_task<T>(
+        me: &Arc<Self>,
+        future: T,
+        id: crate::runtime::task::Id,
+    ) -> JoinHandle<T::Output>
     where
         T: Future + Send + 'static,
         T::Output: Send + 'static,
     {
-        let (handle, notified) = me.owned.bind(future, me.clone());
+        let (handle, notified) = me.owned.bind(future, me.clone(), id);
 
         if let Some(notified) = notified {
             me.schedule(notified, false);
@@ -669,17 +756,21 @@ impl Shared {
 
             // Otherwise, use the inject queue.
             self.inject.push(task);
+            self.scheduler_metrics.inc_remote_schedule_count();
             self.notify_parked();
         })
     }
 
     fn schedule_local(&self, core: &mut Core, task: Notified, is_yield: bool) {
+        core.metrics.inc_local_schedule_count();
+
         // Spawning from the worker thread. If scheduling a "yield" then the
         // task must always be pushed to the back of the queue, enabling other
         // tasks to be executed. If **not** a yield, then there is more
         // flexibility and the task may go to the front of the queue.
         let should_notify = if is_yield {
-            core.run_queue.push_back(task, &self.inject);
+            core.run_queue
+                .push_back(task, &self.inject, &mut core.metrics);
             true
         } else {
             // Push to the LIFO slot
@@ -687,7 +778,8 @@ impl Shared {
             let ret = prev.is_some();
 
             if let Some(prev) = prev {
-                core.run_queue.push_back(prev, &self.inject);
+                core.run_queue
+                    .push_back(prev, &self.inject, &mut core.metrics);
             }
 
             core.lifo_slot = Some(task);
@@ -705,7 +797,6 @@ impl Shared {
 
     pub(super) fn close(&self) {
         if self.inject.close() {
-            self.owned.close();
             self.notify_all();
         }
     }
@@ -762,12 +853,39 @@ impl Shared {
         }
 
         // Drain the injection queue
+        //
+        // We already shut down every task, so we can simply drop the tasks.
         while let Some(task) = self.inject.pop() {
-            task.shutdown();
+            drop(task);
         }
     }
 
     fn ptr_eq(&self, other: &Shared) -> bool {
         std::ptr::eq(self, other)
+    }
+}
+
+impl crate::runtime::ToHandle for Arc<Shared> {
+    fn to_handle(&self) -> crate::runtime::Handle {
+        use crate::runtime::thread_pool::Spawner;
+        use crate::runtime::{self, Handle};
+
+        Handle {
+            spawner: runtime::Spawner::ThreadPool(Spawner {
+                shared: self.clone(),
+            }),
+        }
+    }
+}
+
+cfg_metrics! {
+    impl Shared {
+        pub(super) fn injection_queue_depth(&self) -> usize {
+            self.inject.len()
+        }
+
+        pub(super) fn worker_local_queue_depth(&self, worker: usize) -> usize {
+            self.remotes[worker].steal.len()
+        }
     }
 }

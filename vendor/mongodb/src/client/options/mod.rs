@@ -22,6 +22,7 @@ use rustls::{
     ServerCertVerifier,
     TLSError,
 };
+use rustls_pemfile::{read_one, Item};
 use serde::{
     de::{Error, Unexpected},
     Deserialize,
@@ -290,6 +291,7 @@ pub struct ClientOptions {
     pub app_name: Option<String>,
 
     #[builder(default)]
+    #[derivative(Debug = "ignore")]
     pub(crate) compressors: Option<Vec<String>>,
 
     /// The handler that should process all Connection Monitoring and Pooling events. See the
@@ -404,6 +406,7 @@ pub struct ClientOptions {
     ///
     /// The default value is to have no declared API version
     #[builder(default, skip)]
+    #[derivative(Debug = "ignore")]
     pub(crate) server_api: Option<ServerApi>,
 
     /// The amount of time the Client should attempt to select a server for an operation before
@@ -414,6 +417,7 @@ pub struct ClientOptions {
     pub server_selection_timeout: Option<Duration>,
 
     #[builder(default)]
+    #[derivative(Debug = "ignore")]
     pub(crate) socket_timeout: Option<Duration>,
 
     /// The TLS configuration for the Client to use in its connections with the server.
@@ -439,9 +443,11 @@ pub struct ClientOptions {
     pub(crate) zlib_compression: Option<i32>,
 
     #[builder(default)]
+    #[derivative(Debug = "ignore")]
     pub(crate) original_srv_hostname: Option<String>,
 
     #[builder(default)]
+    #[derivative(Debug = "ignore")]
     pub(crate) original_uri: Option<String>,
 
     /// Configuration of the trust-dns resolver used for SRV and TXT lookups.
@@ -451,10 +457,12 @@ pub struct ClientOptions {
     /// configuration, so a custom configuration is recommended.
     #[builder(default)]
     #[serde(skip)]
+    #[derivative(Debug = "ignore")]
     pub(crate) resolver_config: Option<ResolverConfig>,
 
     /// Used by tests to override MIN_HEARTBEAT_FREQUENCY.
     #[builder(default)]
+    #[derivative(Debug = "ignore")]
     pub(crate) heartbeat_freq_test: Option<Duration>,
 }
 
@@ -608,19 +616,23 @@ impl TlsOptions {
             };
 
             file.seek(SeekFrom::Start(0))?;
-            let key = match pemfile::rsa_private_keys(&mut file) {
-                Ok(key) => key,
-                Err(()) => {
-                    return Err(ErrorKind::ParseError {
-                        data_type: "PEM-encoded RSA key".to_string(),
-                        file_path: path,
+            let key = loop {
+                match read_one(&mut file) {
+                    Ok(Some(Item::PKCS8Key(bytes))) | Ok(Some(Item::RSAKey(bytes))) => {
+                        break rustls::PrivateKey(bytes)
                     }
-                    .into())
+                    Ok(Some(_)) => continue,
+                    Ok(None) | Err(_) => {
+                        return Err(ErrorKind::ParseError {
+                            data_type: "PEM-encoded keys".to_string(),
+                            file_path: path,
+                        }
+                        .into())
+                    }
                 }
             };
 
-            // TODO: Get rid of unwrap.
-            config.set_single_client_cert(certs, key.into_iter().next().unwrap())?;
+            config.set_single_client_cert(certs, key)?;
         }
 
         Ok(config)
@@ -1190,7 +1202,7 @@ impl ClientOptionsParser {
                     credential.mechanism_properties = Some(doc);
                 }
 
-                mechanism.validate_credential(&credential)?;
+                mechanism.validate_credential(credential)?;
                 credential.mechanism = options.auth_mechanism.take();
             }
             None => {

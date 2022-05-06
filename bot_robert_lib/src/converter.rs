@@ -4,5 +4,6 @@ mod slack_element_to_transfer;
 mod slack_text_to_transfer;
 pub mod slack_block_actions_to_model;
 mod slack_block_actions_action_to_model;
-mod slack_text_transfer_to_model;
+pub mod slack_text_transfer_to_model;
 mod slack_block_actions_states_to_model;
+mod slack_action_option_to_model;

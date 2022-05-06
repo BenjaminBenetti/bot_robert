@@ -13,7 +13,7 @@ macro_rules! feature {
     }
 }
 
-/// Enables enter::block_on
+/// Enables enter::block_on.
 macro_rules! cfg_block_on {
     ($($item:item)*) => {
         $(
@@ -28,7 +28,7 @@ macro_rules! cfg_block_on {
     }
 }
 
-/// Enables internal `AtomicWaker` impl
+/// Enables internal `AtomicWaker` impl.
 macro_rules! cfg_atomic_waker_impl {
     ($($item:item)*) => {
         $(
@@ -40,6 +40,18 @@ macro_rules! cfg_atomic_waker_impl {
                 feature = "time",
             ))]
             #[cfg(not(loom))]
+            $item
+        )*
+    }
+}
+
+macro_rules! cfg_aio {
+    ($($item:item)*) => {
+        $(
+            #[cfg(all(any(docsrs, target_os = "freebsd"), feature = "net"))]
+            #[cfg_attr(docsrs,
+                doc(cfg(all(target_os = "freebsd", feature = "net")))
+            )]
             $item
         )*
     }
@@ -162,6 +174,33 @@ macro_rules! cfg_macros {
     }
 }
 
+macro_rules! cfg_metrics {
+    ($($item:item)*) => {
+        $(
+            // For now, metrics is only disabled in loom tests.
+            // When stabilized, it might have a dedicated feature flag.
+            #[cfg(all(tokio_unstable, not(loom)))]
+            #[cfg_attr(docsrs, doc(cfg(tokio_unstable)))]
+            $item
+        )*
+    }
+}
+
+macro_rules! cfg_not_metrics {
+    ($($item:item)*) => {
+        $(
+            #[cfg(not(all(tokio_unstable, not(loom))))]
+            $item
+        )*
+    }
+}
+
+macro_rules! cfg_not_rt_and_metrics {
+    ($($item:item)*) => {
+        $( #[cfg(not(all(feature = "rt", all(tokio_unstable, not(loom)))))] $item )*
+    }
+}
+
 macro_rules! cfg_net {
     ($($item:item)*) => {
         $(
@@ -176,7 +215,7 @@ macro_rules! cfg_net_unix {
     ($($item:item)*) => {
         $(
             #[cfg(all(unix, feature = "net"))]
-            #[cfg_attr(docsrs, doc(cfg(feature = "net")))]
+            #[cfg_attr(docsrs, doc(cfg(all(unix, feature = "net"))))]
             $item
         )*
     }
@@ -185,7 +224,7 @@ macro_rules! cfg_net_unix {
 macro_rules! cfg_net_windows {
     ($($item:item)*) => {
         $(
-            #[cfg(all(any(docsrs, windows), feature = "net"))]
+            #[cfg(all(any(all(doc, docsrs), windows), feature = "net"))]
             #[cfg_attr(docsrs, doc(cfg(all(windows, feature = "net"))))]
             $item
         )*
@@ -334,10 +373,20 @@ macro_rules! cfg_trace {
     ($($item:item)*) => {
         $(
             #[cfg(all(tokio_unstable, feature = "tracing"))]
-            #[cfg_attr(docsrs, doc(cfg(feature = "tracing")))]
+            #[cfg_attr(docsrs, doc(cfg(all(tokio_unstable, feature = "tracing"))))]
             $item
         )*
-    }
+    };
+}
+
+macro_rules! cfg_unstable {
+    ($($item:item)*) => {
+        $(
+            #[cfg(tokio_unstable)]
+            #[cfg_attr(docsrs, doc(cfg(tokio_unstable)))]
+            $item
+        )*
+    };
 }
 
 macro_rules! cfg_not_trace {
@@ -380,6 +429,34 @@ macro_rules! cfg_not_coop {
                     feature = "sync",
                     feature = "time",
                     )))]
+            $item
+        )*
+    }
+}
+
+macro_rules! cfg_has_atomic_u64 {
+    ($($item:item)*) => {
+        $(
+            #[cfg(not(any(
+                    target_arch = "arm",
+                    target_arch = "mips",
+                    target_arch = "powerpc",
+                    target_arch = "riscv32"
+                    )))]
+            $item
+        )*
+    }
+}
+
+macro_rules! cfg_not_has_atomic_u64 {
+    ($($item:item)*) => {
+        $(
+            #[cfg(any(
+                    target_arch = "arm",
+                    target_arch = "mips",
+                    target_arch = "powerpc",
+                    target_arch = "riscv32"
+                    ))]
             $item
         )*
     }

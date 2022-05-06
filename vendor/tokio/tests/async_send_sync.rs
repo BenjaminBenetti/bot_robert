@@ -434,25 +434,37 @@ async_assert_fn!(tokio::sync::watch::Receiver<YY>::changed(_): Send & Sync & !Un
 async_assert_fn!(tokio::sync::watch::Sender<NN>::closed(_): !Send & !Sync & !Unpin);
 async_assert_fn!(tokio::sync::watch::Sender<YN>::closed(_): !Send & !Sync & !Unpin);
 async_assert_fn!(tokio::sync::watch::Sender<YY>::closed(_): Send & Sync & !Unpin);
-
-async_assert_fn!(tokio::task::LocalKey<u32>::scope(_, u32, BoxFutureSync<()>): Send & Sync & !Unpin);
-async_assert_fn!(tokio::task::LocalKey<u32>::scope(_, u32, BoxFutureSend<()>): Send & !Sync & !Unpin);
-async_assert_fn!(tokio::task::LocalKey<u32>::scope(_, u32, BoxFuture<()>): !Send & !Sync & !Unpin);
-async_assert_fn!(tokio::task::LocalKey<Cell<u32>>::scope(_, Cell<u32>, BoxFutureSync<()>): Send & !Sync & !Unpin);
-async_assert_fn!(tokio::task::LocalKey<Cell<u32>>::scope(_, Cell<u32>, BoxFutureSend<()>): Send & !Sync & !Unpin);
 async_assert_fn!(tokio::task::LocalKey<Cell<u32>>::scope(_, Cell<u32>, BoxFuture<()>): !Send & !Sync & !Unpin);
-async_assert_fn!(tokio::task::LocalKey<Rc<u32>>::scope(_, Rc<u32>, BoxFutureSync<()>): !Send & !Sync & !Unpin);
-async_assert_fn!(tokio::task::LocalKey<Rc<u32>>::scope(_, Rc<u32>, BoxFutureSend<()>): !Send & !Sync & !Unpin);
+async_assert_fn!(tokio::task::LocalKey<Cell<u32>>::scope(_, Cell<u32>, BoxFutureSend<()>): Send & !Sync & !Unpin);
+async_assert_fn!(tokio::task::LocalKey<Cell<u32>>::scope(_, Cell<u32>, BoxFutureSync<()>): Send & !Sync & !Unpin);
 async_assert_fn!(tokio::task::LocalKey<Rc<u32>>::scope(_, Rc<u32>, BoxFuture<()>): !Send & !Sync & !Unpin);
+async_assert_fn!(tokio::task::LocalKey<Rc<u32>>::scope(_, Rc<u32>, BoxFutureSend<()>): !Send & !Sync & !Unpin);
+async_assert_fn!(tokio::task::LocalKey<Rc<u32>>::scope(_, Rc<u32>, BoxFutureSync<()>): !Send & !Sync & !Unpin);
+async_assert_fn!(tokio::task::LocalKey<u32>::scope(_, u32, BoxFuture<()>): !Send & !Sync & !Unpin);
+async_assert_fn!(tokio::task::LocalKey<u32>::scope(_, u32, BoxFutureSend<()>): Send & !Sync & !Unpin);
+async_assert_fn!(tokio::task::LocalKey<u32>::scope(_, u32, BoxFutureSync<()>): Send & Sync & !Unpin);
 async_assert_fn!(tokio::task::LocalSet::run_until(_, BoxFutureSync<()>): !Send & !Sync & !Unpin);
 async_assert_fn!(tokio::task::unconstrained(BoxFuture<()>): !Send & !Sync & Unpin);
 async_assert_fn!(tokio::task::unconstrained(BoxFutureSend<()>): Send & !Sync & Unpin);
 async_assert_fn!(tokio::task::unconstrained(BoxFutureSync<()>): Send & Sync & Unpin);
-assert_value!(tokio::task::LocalSet: !Send & !Sync & Unpin);
-assert_value!(tokio::task::JoinHandle<YY>: Send & Sync & Unpin);
-assert_value!(tokio::task::JoinHandle<YN>: Send & Sync & Unpin);
-assert_value!(tokio::task::JoinHandle<NN>: !Send & !Sync & Unpin);
 assert_value!(tokio::task::JoinError: Send & Sync & Unpin);
+assert_value!(tokio::task::JoinHandle<NN>: !Send & !Sync & Unpin);
+assert_value!(tokio::task::JoinHandle<YN>: Send & Sync & Unpin);
+assert_value!(tokio::task::JoinHandle<YY>: Send & Sync & Unpin);
+#[cfg(tokio_unstable)]
+mod unstable {
+    use super::*;
+    async_assert_fn!(tokio::task::JoinSet<Cell<u32>>::join_one(_): Send & Sync & !Unpin);
+    async_assert_fn!(tokio::task::JoinSet<Cell<u32>>::shutdown(_): Send & Sync & !Unpin);
+    async_assert_fn!(tokio::task::JoinSet<Rc<u32>>::join_one(_): !Send & !Sync & !Unpin);
+    async_assert_fn!(tokio::task::JoinSet<Rc<u32>>::shutdown(_): !Send & !Sync & !Unpin);
+    async_assert_fn!(tokio::task::JoinSet<u32>::join_one(_): Send & Sync & !Unpin);
+    async_assert_fn!(tokio::task::JoinSet<u32>::shutdown(_): Send & Sync & !Unpin);
+    assert_value!(tokio::task::JoinSet<YY>: Send & Sync & Unpin);
+    assert_value!(tokio::task::JoinSet<YN>: Send & Sync & Unpin);
+    assert_value!(tokio::task::JoinSet<NN>: !Send & !Sync & Unpin);
+    assert_value!(tokio::task::LocalSet: !Send & !Sync & Unpin);
+}
 
 assert_value!(tokio::runtime::Builder: Send & Sync & Unpin);
 assert_value!(tokio::runtime::EnterGuard<'_>: Send & Sync & Unpin);
@@ -514,6 +526,7 @@ async_assert_fn!(tokio::io::AsyncBufReadExt::read_until(&mut BoxAsyncRead, u8, &
 async_assert_fn!(
     tokio::io::AsyncBufReadExt::read_line(&mut BoxAsyncRead, &mut String): Send & Sync & !Unpin
 );
+async_assert_fn!(tokio::io::AsyncBufReadExt::fill_buf(&mut BoxAsyncRead): Send & Sync & !Unpin);
 async_assert_fn!(tokio::io::AsyncReadExt::read(&mut BoxAsyncRead, &mut [u8]): Send & Sync & !Unpin);
 async_assert_fn!(tokio::io::AsyncReadExt::read_buf(&mut BoxAsyncRead, &mut Vec<u8>): Send & Sync & !Unpin);
 async_assert_fn!(
@@ -529,6 +542,8 @@ async_assert_fn!(tokio::io::AsyncReadExt::read_u64(&mut BoxAsyncRead): Send & Sy
 async_assert_fn!(tokio::io::AsyncReadExt::read_i64(&mut BoxAsyncRead): Send & Sync & !Unpin);
 async_assert_fn!(tokio::io::AsyncReadExt::read_u128(&mut BoxAsyncRead): Send & Sync & !Unpin);
 async_assert_fn!(tokio::io::AsyncReadExt::read_i128(&mut BoxAsyncRead): Send & Sync & !Unpin);
+async_assert_fn!(tokio::io::AsyncReadExt::read_f32(&mut BoxAsyncRead): Send & Sync & !Unpin);
+async_assert_fn!(tokio::io::AsyncReadExt::read_f64(&mut BoxAsyncRead): Send & Sync & !Unpin);
 async_assert_fn!(tokio::io::AsyncReadExt::read_u16_le(&mut BoxAsyncRead): Send & Sync & !Unpin);
 async_assert_fn!(tokio::io::AsyncReadExt::read_i16_le(&mut BoxAsyncRead): Send & Sync & !Unpin);
 async_assert_fn!(tokio::io::AsyncReadExt::read_u32_le(&mut BoxAsyncRead): Send & Sync & !Unpin);
@@ -537,6 +552,8 @@ async_assert_fn!(tokio::io::AsyncReadExt::read_u64_le(&mut BoxAsyncRead): Send &
 async_assert_fn!(tokio::io::AsyncReadExt::read_i64_le(&mut BoxAsyncRead): Send & Sync & !Unpin);
 async_assert_fn!(tokio::io::AsyncReadExt::read_u128_le(&mut BoxAsyncRead): Send & Sync & !Unpin);
 async_assert_fn!(tokio::io::AsyncReadExt::read_i128_le(&mut BoxAsyncRead): Send & Sync & !Unpin);
+async_assert_fn!(tokio::io::AsyncReadExt::read_f32_le(&mut BoxAsyncRead): Send & Sync & !Unpin);
+async_assert_fn!(tokio::io::AsyncReadExt::read_f64_le(&mut BoxAsyncRead): Send & Sync & !Unpin);
 async_assert_fn!(tokio::io::AsyncReadExt::read_to_end(&mut BoxAsyncRead, &mut Vec<u8>): Send & Sync & !Unpin);
 async_assert_fn!(
     tokio::io::AsyncReadExt::read_to_string(&mut BoxAsyncRead, &mut String): Send & Sync & !Unpin
@@ -587,6 +604,12 @@ async_assert_fn!(
     tokio::io::AsyncWriteExt::write_i128(&mut BoxAsyncWrite, i128): Send & Sync & !Unpin
 );
 async_assert_fn!(
+    tokio::io::AsyncWriteExt::write_f32(&mut BoxAsyncWrite, f32): Send & Sync & !Unpin
+);
+async_assert_fn!(
+    tokio::io::AsyncWriteExt::write_f64(&mut BoxAsyncWrite, f64): Send & Sync & !Unpin
+);
+async_assert_fn!(
     tokio::io::AsyncWriteExt::write_u16_le(&mut BoxAsyncWrite, u16): Send & Sync & !Unpin
 );
 async_assert_fn!(
@@ -609,6 +632,12 @@ async_assert_fn!(
 );
 async_assert_fn!(
     tokio::io::AsyncWriteExt::write_i128_le(&mut BoxAsyncWrite, i128): Send & Sync & !Unpin
+);
+async_assert_fn!(
+    tokio::io::AsyncWriteExt::write_f32_le(&mut BoxAsyncWrite, f32): Send & Sync & !Unpin
+);
+async_assert_fn!(
+    tokio::io::AsyncWriteExt::write_f64_le(&mut BoxAsyncWrite, f64): Send & Sync & !Unpin
 );
 async_assert_fn!(tokio::io::AsyncWriteExt::flush(&mut BoxAsyncWrite): Send & Sync & !Unpin);
 async_assert_fn!(tokio::io::AsyncWriteExt::shutdown(&mut BoxAsyncWrite): Send & Sync & !Unpin);

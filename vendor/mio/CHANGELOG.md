@@ -1,3 +1,64 @@
+# 0.8.2
+
+## Added
+
+* Experimental support for Redox.
+
+# 0.8.1
+
+## Added
+
+* Add `try_io` method to all I/O types (#1551). This execute a user defined I/O
+  closure while updating Mio's internal state ensuring that the I/O type
+  receives more events if it hits a WouldBlock error. This is added to the
+  following types:
+   * `TcpStream`
+   * `UdpSocket`
+   * `UnixDatagram`
+   * `UnixStream`
+   * `unix::pipe::Sender`
+   * `unix::pipe::Receiver`
+* Basic, experimental support for `wasm32-wasi` target (#1549). Note that a lot
+  of time type are still missing, e.g. the `Waker`, and may never be possible to
+  implement.
+
+# 0.8.0
+
+## Removed
+
+* Deprecated features (https://github.com/tokio-rs/mio/commit/105f8f2afb57b01ddea716a0aa9720f226c520e3):
+  * extra-docs (always enabled)
+  * tcp (replaced with "net" feature).
+  * udp (replaced with "net" feature).
+  * uds (replaced with "net" feature).
+  * pipe (replaced with "os-ext" feature).
+  * os-util (replaced with "os-ext" feature).
+* `TcpSocket` type
+  (https://github.com/tokio-rs/mio/commit/02e9be41f27daf822575444fdd2b3067433a5996).
+  The socket2 crate provides all the functionality and more.
+* Support for Solaris, it never really worked anyway
+  (https://github.com/tokio-rs/mio/pull/1528).
+
+## Changes
+
+* Update minimum Rustc version (MSVR) to 1.46.0
+  (https://github.com/tokio-rs/mio/commit/5c577efecd23750a9a3e0f6ad080ab98f14a255d).
+
+## Added
+
+* `UdpSocket::peer_addr`
+  (https://github.com/tokio-rs/mio/commit/5fc104d08e0e74c8a19247f7cba0f058699fc438).
+
+# 0.7.14
+
+## Fixes
+
+* Remove use unsound internal macro (#1519).
+
+## Added
+
+* `sys::unix::SocketAddr::as_abstract_namespace()` (#1520).
+
 # 0.7.13
 
 ## Fixes
@@ -26,6 +87,8 @@
 
 * Fix an instance of not doc(cfg(.*))
   (https://github.com/tokio-rs/mio/commit/25e8f911357c740034f10a170dfa4ea1b28234ce).
+
+# 0.7.9
 
 ## Fixes
 
@@ -60,7 +123,6 @@
   that is on the reference to them, an implementation existed on the types
   themselves already
   (https://github.com/tokio-rs/mio/commit/1be481dcbbcb6906364008b5d61e7f53cddc3eb3).
-
 
 ## Fixes
 

@@ -4,3 +4,5 @@ pub mod command_matcher;
 pub mod command_handler;
 pub mod simple_random_response_handler;
 pub mod joke_add_handler;
+pub mod nop_response_handler;
+pub mod lunch_add_response_handler;

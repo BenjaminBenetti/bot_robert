@@ -1,6 +1,6 @@
 [package]
 name = "bot_robert_server"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["CanadianCommander <ben.benetti@shaw.ca>"]
 edition = "2018"
 

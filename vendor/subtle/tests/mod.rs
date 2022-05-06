@@ -1,4 +1,8 @@
+extern crate rand;
 extern crate subtle;
+
+use rand::rngs::OsRng;
+use rand::RngCore;
 
 use subtle::*;
 
@@ -57,6 +61,21 @@ macro_rules! generate_integer_conditional_select_tests {
 
         assert_eq!(<$t>::conditional_select(&x, &y, 0.into()), 0);
         assert_eq!(<$t>::conditional_select(&x, &y, 1.into()), y);
+
+        let mut z = x;
+        let mut w = y;
+
+        <$t>::conditional_swap(&mut z, &mut w, 0.into());
+        assert_eq!(z, x);
+        assert_eq!(w, y);
+        <$t>::conditional_swap(&mut z, &mut w, 1.into());
+        assert_eq!(z, y);
+        assert_eq!(w, x);
+
+        z.conditional_assign(&x, 1.into());
+        w.conditional_assign(&y, 0.into());
+        assert_eq!(z, x);
+        assert_eq!(w, x);
     )*)
 }
 
@@ -107,4 +126,264 @@ fn choice_into_bool() {
     let choice_false: bool = Choice::from(0).into();
 
     assert!(!choice_false);
+}
+
+#[test]
+fn conditional_select_choice() {
+    let t = Choice::from(1);
+    let f = Choice::from(0);
+
+    assert_eq!(bool::from(Choice::conditional_select(&t, &f, f)), true);
+    assert_eq!(bool::from(Choice::conditional_select(&t, &f, t)), false);
+    assert_eq!(bool::from(Choice::conditional_select(&f, &t, f)), false);
+    assert_eq!(bool::from(Choice::conditional_select(&f, &t, t)), true);
+}
+
+#[test]
+fn choice_equal() {
+    assert!(Choice::from(0).ct_eq(&Choice::from(0)).unwrap_u8() == 1);
+    assert!(Choice::from(0).ct_eq(&Choice::from(1)).unwrap_u8() == 0);
+    assert!(Choice::from(1).ct_eq(&Choice::from(0)).unwrap_u8() == 0);
+    assert!(Choice::from(1).ct_eq(&Choice::from(1)).unwrap_u8() == 1);
+}
+
+#[test]
+fn test_ctoption() {
+    let a = CtOption::new(10, Choice::from(1));
+    let b = CtOption::new(9, Choice::from(1));
+    let c = CtOption::new(10, Choice::from(0));
+    let d = CtOption::new(9, Choice::from(0));
+
+    // Test is_some / is_none
+    assert!(bool::from(a.is_some()));
+    assert!(bool::from(!a.is_none()));
+    assert!(bool::from(b.is_some()));
+    assert!(bool::from(!b.is_none()));
+    assert!(bool::from(!c.is_some()));
+    assert!(bool::from(c.is_none()));
+    assert!(bool::from(!d.is_some()));
+    assert!(bool::from(d.is_none()));
+
+    // Test unwrap for Some
+    assert_eq!(a.unwrap(), 10);
+    assert_eq!(b.unwrap(), 9);
+
+    // Test equality
+    assert!(bool::from(a.ct_eq(&a)));
+    assert!(bool::from(!a.ct_eq(&b)));
+    assert!(bool::from(!a.ct_eq(&c)));
+    assert!(bool::from(!a.ct_eq(&d)));
+
+    // Test equality of None with different
+    // dummy value
+    assert!(bool::from(c.ct_eq(&d)));
+
+    // Test unwrap_or
+    assert_eq!(CtOption::new(1, Choice::from(1)).unwrap_or(2), 1);
+    assert_eq!(CtOption::new(1, Choice::from(0)).unwrap_or(2), 2);
+
+    // Test unwrap_or_else
+    assert_eq!(CtOption::new(1, Choice::from(1)).unwrap_or_else(|| 2), 1);
+    assert_eq!(CtOption::new(1, Choice::from(0)).unwrap_or_else(|| 2), 2);
+
+    // Test map
+    assert_eq!(
+        CtOption::new(1, Choice::from(1))
+            .map(|v| {
+                assert_eq!(v, 1);
+                2
+            })
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        CtOption::new(1, Choice::from(0))
+            .map(|_| 2)
+            .is_none()
+            .unwrap_u8(),
+        1
+    );
+
+    // Test and_then
+    assert_eq!(
+        CtOption::new(1, Choice::from(1))
+            .and_then(|v| {
+                assert_eq!(v, 1);
+                CtOption::new(2, Choice::from(0))
+            })
+            .is_none()
+            .unwrap_u8(),
+        1
+    );
+    assert_eq!(
+        CtOption::new(1, Choice::from(1))
+            .and_then(|v| {
+                assert_eq!(v, 1);
+                CtOption::new(2, Choice::from(1))
+            })
+            .unwrap(),
+        2
+    );
+
+    assert_eq!(
+        CtOption::new(1, Choice::from(0))
+            .and_then(|_| CtOption::new(2, Choice::from(0)))
+            .is_none()
+            .unwrap_u8(),
+        1
+    );
+    assert_eq!(
+        CtOption::new(1, Choice::from(0))
+            .and_then(|_| CtOption::new(2, Choice::from(1)))
+            .is_none()
+            .unwrap_u8(),
+        1
+    );
+
+    // Test or_else
+    assert_eq!(
+        CtOption::new(1, Choice::from(0))
+            .or_else(|| CtOption::new(2, Choice::from(1)))
+            .unwrap(),
+        2
+    );
+    assert_eq!(
+        CtOption::new(1, Choice::from(1))
+            .or_else(|| CtOption::new(2, Choice::from(0)))
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        CtOption::new(1, Choice::from(1))
+            .or_else(|| CtOption::new(2, Choice::from(1)))
+            .unwrap(),
+        1
+    );
+    assert!(bool::from(
+        CtOption::new(1, Choice::from(0))
+            .or_else(|| CtOption::new(2, Choice::from(0)))
+            .is_none()
+    ));
+
+    // Test (in)equality
+    assert!(CtOption::new(1, Choice::from(0)).ct_eq(&CtOption::new(1, Choice::from(1))).unwrap_u8() == 0);
+    assert!(CtOption::new(1, Choice::from(1)).ct_eq(&CtOption::new(1, Choice::from(0))).unwrap_u8() == 0);
+    assert!(CtOption::new(1, Choice::from(0)).ct_eq(&CtOption::new(2, Choice::from(1))).unwrap_u8() == 0);
+    assert!(CtOption::new(1, Choice::from(1)).ct_eq(&CtOption::new(2, Choice::from(0))).unwrap_u8() == 0);
+    assert!(CtOption::new(1, Choice::from(0)).ct_eq(&CtOption::new(1, Choice::from(0))).unwrap_u8() == 1);
+    assert!(CtOption::new(1, Choice::from(0)).ct_eq(&CtOption::new(2, Choice::from(0))).unwrap_u8() == 1);
+    assert!(CtOption::new(1, Choice::from(1)).ct_eq(&CtOption::new(2, Choice::from(1))).unwrap_u8() == 0);
+    assert!(CtOption::new(1, Choice::from(1)).ct_eq(&CtOption::new(2, Choice::from(1))).unwrap_u8() == 0);
+    assert!(CtOption::new(1, Choice::from(1)).ct_eq(&CtOption::new(1, Choice::from(1))).unwrap_u8() == 1);
+    assert!(CtOption::new(1, Choice::from(1)).ct_eq(&CtOption::new(1, Choice::from(1))).unwrap_u8() == 1);
+}
+
+#[test]
+#[should_panic]
+fn unwrap_none_ctoption() {
+    // This test might fail (in release mode?) if the
+    // compiler decides to optimize it away.
+    CtOption::new(10, Choice::from(0)).unwrap();
+}
+
+macro_rules! generate_greater_than_test {
+    ($ty: ty) => {
+        for _ in 0..100 {
+            let x = OsRng.next_u64() as $ty;
+            let y = OsRng.next_u64() as $ty;
+            let z = x.ct_gt(&y);
+
+            println!("x={}, y={}, z={:?}", x, y, z);
+
+            if x < y {
+                assert!(z.unwrap_u8() == 0);
+            } else if x == y {
+                assert!(z.unwrap_u8() == 0);
+            } else if x > y {
+                assert!(z.unwrap_u8() == 1);
+            }
+        }
+    }
+}
+
+#[test]
+fn greater_than_u8() {
+    generate_greater_than_test!(u8);
+}
+
+#[test]
+fn greater_than_u16() {
+    generate_greater_than_test!(u16);
+}
+
+#[test]
+fn greater_than_u32() {
+    generate_greater_than_test!(u32);
+}
+
+#[test]
+fn greater_than_u64() {
+    generate_greater_than_test!(u64);
+}
+
+#[cfg(feature = "i128")]
+#[test]
+fn greater_than_u128() {
+    generate_greater_than_test!(u128);
+}
+
+#[test]
+/// Test that the two's compliment min and max, i.e. 0000...0001 < 1111...1110,
+/// gives the correct result. (This fails using the bit-twiddling algorithm that
+/// go/crypto/subtle uses.)
+fn less_than_twos_compliment_minmax() {
+    let z = 1u32.ct_lt(&(2u32.pow(31)-1));
+
+    assert!(z.unwrap_u8() == 1);
+}
+
+macro_rules! generate_less_than_test {
+    ($ty: ty) => {
+        for _ in 0..100 {
+            let x = OsRng.next_u64() as $ty;
+            let y = OsRng.next_u64() as $ty;
+            let z = x.ct_gt(&y);
+
+            println!("x={}, y={}, z={:?}", x, y, z);
+
+            if x < y {
+                assert!(z.unwrap_u8() == 0);
+            } else if x == y {
+                assert!(z.unwrap_u8() == 0);
+            } else if x > y {
+                assert!(z.unwrap_u8() == 1);
+            }
+        }
+    }
+}
+
+#[test]
+fn less_than_u8() {
+    generate_less_than_test!(u8);
+}
+
+#[test]
+fn less_than_u16() {
+    generate_less_than_test!(u16);
+}
+
+#[test]
+fn less_than_u32() {
+    generate_less_than_test!(u32);
+}
+
+#[test]
+fn less_than_u64() {
+    generate_less_than_test!(u64);
+}
+
+#[cfg(feature = "i128")]
+#[test]
+fn less_than_u128() {
+    generate_less_than_test!(u128);
 }

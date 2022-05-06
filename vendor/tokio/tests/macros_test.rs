@@ -1,3 +1,5 @@
+#![cfg(feature = "full")]
+
 use tokio::test;
 
 #[test]
@@ -29,4 +31,42 @@ fn trait_method() {
         async fn f(self) {}
     }
     ().f()
+}
+
+// https://github.com/tokio-rs/tokio/issues/4175
+#[tokio::main]
+pub async fn issue_4175_main_1() -> ! {
+    panic!();
+}
+#[tokio::main]
+pub async fn issue_4175_main_2() -> std::io::Result<()> {
+    panic!();
+}
+#[allow(unreachable_code)]
+#[tokio::test]
+pub async fn issue_4175_test() -> std::io::Result<()> {
+    return Ok(());
+    panic!();
+}
+
+// https://github.com/tokio-rs/tokio/issues/4175
+pub mod clippy_semicolon_if_nothing_returned {
+    #![deny(clippy::semicolon_if_nothing_returned)]
+
+    #[tokio::main]
+    pub async fn local() {
+        let _x = ();
+    }
+    #[tokio::main]
+    pub async fn item() {
+        fn _f() {}
+    }
+    #[tokio::main]
+    pub async fn semi() {
+        panic!();
+    }
+    #[tokio::main]
+    pub async fn empty() {
+        // To trigger clippy::semicolon_if_nothing_returned lint, the block needs to contain newline.
+    }
 }

@@ -12,7 +12,7 @@ mod x509;
 
 use std::{borrow::Cow, fmt::Debug, str::FromStr};
 
-use hmac::Mac;
+use hmac::{Mac, NewMac};
 use rand::Rng;
 use serde::Deserialize;
 use typed_builder::TypedBuilder;
@@ -454,7 +454,7 @@ pub(crate) enum ClientFirst {
 impl ClientFirst {
     pub(crate) fn to_document(&self) -> Document {
         match self {
-            Self::Scram(version, client_first) => client_first.to_command(&version).body,
+            Self::Scram(version, client_first) => client_first.to_command(version).body,
             Self::X509(command) => command.body.clone(),
         }
     }
@@ -490,9 +490,13 @@ pub(crate) fn generate_nonce() -> String {
     base64::encode(&result)
 }
 
-fn mac<M: Mac>(key: &[u8], input: &[u8], auth_mechanism: &str) -> Result<impl AsRef<[u8]>> {
+fn mac<M: Mac + NewMac>(
+    key: &[u8],
+    input: &[u8],
+    auth_mechanism: &str,
+) -> Result<impl AsRef<[u8]>> {
     let mut mac =
-        M::new_varkey(key).map_err(|_| Error::unknown_authentication_error(auth_mechanism))?;
-    mac.input(input);
-    Ok(mac.result().code())
+        M::new_from_slice(key).map_err(|_| Error::unknown_authentication_error(auth_mechanism))?;
+    mac.update(input);
+    Ok(mac.finalize().into_bytes())
 }

@@ -12,6 +12,10 @@ use std::task::{Context, Poll};
 use crate::io::{AsyncRead, AsyncWrite, Interest, PollEvented, ReadBuf, Ready};
 use crate::os::windows::io::{AsRawHandle, FromRawHandle, RawHandle};
 
+cfg_io_util! {
+    use bytes::BufMut;
+}
+
 // Hide imports which are not used when generating documentation.
 #[cfg(not(docsrs))]
 mod doc {
@@ -105,7 +109,7 @@ pub struct NamedPipeServer {
 }
 
 impl NamedPipeServer {
-    /// Construct a new named pipe server from the specified raw handle.
+    /// Constructs a new named pipe server from the specified raw handle.
     ///
     /// This function will consume ownership of the handle given, passing
     /// responsibility for closing the handle to the returned object.
@@ -234,7 +238,7 @@ impl NamedPipeServer {
         self.io.disconnect()
     }
 
-    /// Wait for any of the requested ready states.
+    /// Waits for any of the requested ready states.
     ///
     /// This function is usually paired with `try_read()` or `try_write()`. It
     /// can be used to concurrently read / write to the same pipe on a single
@@ -301,7 +305,7 @@ impl NamedPipeServer {
         Ok(event.ready)
     }
 
-    /// Wait for the pipe to become readable.
+    /// Waits for the pipe to become readable.
     ///
     /// This function is equivalent to `ready(Interest::READABLE)` and is usually
     /// paired with `try_read()`.
@@ -383,7 +387,7 @@ impl NamedPipeServer {
         self.io.registration().poll_read_ready(cx).map_ok(|_| ())
     }
 
-    /// Try to read data from the pipe into the provided buffer, returning how
+    /// Tries to read data from the pipe into the provided buffer, returning how
     /// many bytes were read.
     ///
     /// Receives any pending data from the pipe but does not wait for new data
@@ -450,7 +454,7 @@ impl NamedPipeServer {
             .try_io(Interest::READABLE, || (&*self.io).read(buf))
     }
 
-    /// Try to read data from the pipe into the provided buffers, returning
+    /// Tries to read data from the pipe into the provided buffers, returning
     /// how many bytes were read.
     ///
     /// Data is copied to fill each buffer in order, with the final buffer
@@ -528,7 +532,87 @@ impl NamedPipeServer {
             .try_io(Interest::READABLE, || (&*self.io).read_vectored(bufs))
     }
 
-    /// Wait for the pipe to become writable.
+    cfg_io_util! {
+        /// Tries to read data from the stream into the provided buffer, advancing the
+        /// buffer's internal cursor, returning how many bytes were read.
+        ///
+        /// Receives any pending data from the socket but does not wait for new data
+        /// to arrive. On success, returns the number of bytes read. Because
+        /// `try_read_buf()` is non-blocking, the buffer does not have to be stored by
+        /// the async task and can exist entirely on the stack.
+        ///
+        /// Usually, [`readable()`] or [`ready()`] is used with this function.
+        ///
+        /// [`readable()`]: NamedPipeServer::readable()
+        /// [`ready()`]: NamedPipeServer::ready()
+        ///
+        /// # Return
+        ///
+        /// If data is successfully read, `Ok(n)` is returned, where `n` is the
+        /// number of bytes read. `Ok(0)` indicates the stream's read half is closed
+        /// and will no longer yield data. If the stream is not ready to read data
+        /// `Err(io::ErrorKind::WouldBlock)` is returned.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// use tokio::net::windows::named_pipe;
+        /// use std::error::Error;
+        /// use std::io;
+        ///
+        /// const PIPE_NAME: &str = r"\\.\pipe\tokio-named-pipe-client-readable";
+        ///
+        /// #[tokio::main]
+        /// async fn main() -> Result<(), Box<dyn Error>> {
+        ///     let server = named_pipe::ServerOptions::new().create(PIPE_NAME)?;
+        ///
+        ///     loop {
+        ///         // Wait for the socket to be readable
+        ///         server.readable().await?;
+        ///
+        ///         let mut buf = Vec::with_capacity(4096);
+        ///
+        ///         // Try to read data, this may still fail with `WouldBlock`
+        ///         // if the readiness event is a false positive.
+        ///         match server.try_read_buf(&mut buf) {
+        ///             Ok(0) => break,
+        ///             Ok(n) => {
+        ///                 println!("read {} bytes", n);
+        ///             }
+        ///             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+        ///                 continue;
+        ///             }
+        ///             Err(e) => {
+        ///                 return Err(e.into());
+        ///             }
+        ///         }
+        ///     }
+        ///
+        ///     Ok(())
+        /// }
+        /// ```
+        pub fn try_read_buf<B: BufMut>(&self, buf: &mut B) -> io::Result<usize> {
+            self.io.registration().try_io(Interest::READABLE, || {
+                use std::io::Read;
+
+                let dst = buf.chunk_mut();
+                let dst =
+                    unsafe { &mut *(dst as *mut _ as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+
+                // Safety: We trust `NamedPipeServer::read` to have filled up `n` bytes in the
+                // buffer.
+                let n = (&*self.io).read(dst)?;
+
+                unsafe {
+                    buf.advance_mut(n);
+                }
+
+                Ok(n)
+            })
+        }
+    }
+
+    /// Waits for the pipe to become writable.
     ///
     /// This function is equivalent to `ready(Interest::WRITABLE)` and is usually
     /// paired with `try_write()`.
@@ -606,7 +690,7 @@ impl NamedPipeServer {
         self.io.registration().poll_write_ready(cx).map_ok(|_| ())
     }
 
-    /// Try to write a buffer to the pipe, returning how many bytes were
+    /// Tries to write a buffer to the pipe, returning how many bytes were
     /// written.
     ///
     /// The function will attempt to write the entire contents of `buf`, but
@@ -662,7 +746,7 @@ impl NamedPipeServer {
             .try_io(Interest::WRITABLE, || (&*self.io).write(buf))
     }
 
-    /// Try to write several buffers to the pipe, returning how many bytes
+    /// Tries to write several buffers to the pipe, returning how many bytes
     /// were written.
     ///
     /// Data is written from each buffer in order, with the final buffer read
@@ -724,7 +808,7 @@ impl NamedPipeServer {
             .try_io(Interest::WRITABLE, || (&*self.io).write_vectored(buf))
     }
 
-    /// Try to read or write from the socket using a user-provided IO operation.
+    /// Tries to read or write from the socket using a user-provided IO operation.
     ///
     /// If the socket is ready, the provided closure is called. The closure
     /// should attempt to perform IO operation from the socket by manually
@@ -846,7 +930,7 @@ pub struct NamedPipeClient {
 }
 
 impl NamedPipeClient {
-    /// Construct a new named pipe client from the specified raw handle.
+    /// Constructs a new named pipe client from the specified raw handle.
     ///
     /// This function will consume ownership of the handle given, passing
     /// responsibility for closing the handle to the returned object.
@@ -896,7 +980,7 @@ impl NamedPipeClient {
         unsafe { named_pipe_info(self.io.as_raw_handle()) }
     }
 
-    /// Wait for any of the requested ready states.
+    /// Waits for any of the requested ready states.
     ///
     /// This function is usually paired with `try_read()` or `try_write()`. It
     /// can be used to concurrently read / write to the same pipe on a single
@@ -962,7 +1046,7 @@ impl NamedPipeClient {
         Ok(event.ready)
     }
 
-    /// Wait for the pipe to become readable.
+    /// Waits for the pipe to become readable.
     ///
     /// This function is equivalent to `ready(Interest::READABLE)` and is usually
     /// paired with `try_read()`.
@@ -1043,7 +1127,7 @@ impl NamedPipeClient {
         self.io.registration().poll_read_ready(cx).map_ok(|_| ())
     }
 
-    /// Try to read data from the pipe into the provided buffer, returning how
+    /// Tries to read data from the pipe into the provided buffer, returning how
     /// many bytes were read.
     ///
     /// Receives any pending data from the pipe but does not wait for new data
@@ -1109,7 +1193,7 @@ impl NamedPipeClient {
             .try_io(Interest::READABLE, || (&*self.io).read(buf))
     }
 
-    /// Try to read data from the pipe into the provided buffers, returning
+    /// Tries to read data from the pipe into the provided buffers, returning
     /// how many bytes were read.
     ///
     /// Data is copied to fill each buffer in order, with the final buffer
@@ -1186,7 +1270,87 @@ impl NamedPipeClient {
             .try_io(Interest::READABLE, || (&*self.io).read_vectored(bufs))
     }
 
-    /// Wait for the pipe to become writable.
+    cfg_io_util! {
+        /// Tries to read data from the stream into the provided buffer, advancing the
+        /// buffer's internal cursor, returning how many bytes were read.
+        ///
+        /// Receives any pending data from the socket but does not wait for new data
+        /// to arrive. On success, returns the number of bytes read. Because
+        /// `try_read_buf()` is non-blocking, the buffer does not have to be stored by
+        /// the async task and can exist entirely on the stack.
+        ///
+        /// Usually, [`readable()`] or [`ready()`] is used with this function.
+        ///
+        /// [`readable()`]: NamedPipeClient::readable()
+        /// [`ready()`]: NamedPipeClient::ready()
+        ///
+        /// # Return
+        ///
+        /// If data is successfully read, `Ok(n)` is returned, where `n` is the
+        /// number of bytes read. `Ok(0)` indicates the stream's read half is closed
+        /// and will no longer yield data. If the stream is not ready to read data
+        /// `Err(io::ErrorKind::WouldBlock)` is returned.
+        ///
+        /// # Examples
+        ///
+        /// ```no_run
+        /// use tokio::net::windows::named_pipe;
+        /// use std::error::Error;
+        /// use std::io;
+        ///
+        /// const PIPE_NAME: &str = r"\\.\pipe\tokio-named-pipe-client-readable";
+        ///
+        /// #[tokio::main]
+        /// async fn main() -> Result<(), Box<dyn Error>> {
+        ///     let client = named_pipe::ClientOptions::new().open(PIPE_NAME)?;
+        ///
+        ///     loop {
+        ///         // Wait for the socket to be readable
+        ///         client.readable().await?;
+        ///
+        ///         let mut buf = Vec::with_capacity(4096);
+        ///
+        ///         // Try to read data, this may still fail with `WouldBlock`
+        ///         // if the readiness event is a false positive.
+        ///         match client.try_read_buf(&mut buf) {
+        ///             Ok(0) => break,
+        ///             Ok(n) => {
+        ///                 println!("read {} bytes", n);
+        ///             }
+        ///             Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+        ///                 continue;
+        ///             }
+        ///             Err(e) => {
+        ///                 return Err(e.into());
+        ///             }
+        ///         }
+        ///     }
+        ///
+        ///     Ok(())
+        /// }
+        /// ```
+        pub fn try_read_buf<B: BufMut>(&self, buf: &mut B) -> io::Result<usize> {
+            self.io.registration().try_io(Interest::READABLE, || {
+                use std::io::Read;
+
+                let dst = buf.chunk_mut();
+                let dst =
+                    unsafe { &mut *(dst as *mut _ as *mut [std::mem::MaybeUninit<u8>] as *mut [u8]) };
+
+                // Safety: We trust `NamedPipeClient::read` to have filled up `n` bytes in the
+                // buffer.
+                let n = (&*self.io).read(dst)?;
+
+                unsafe {
+                    buf.advance_mut(n);
+                }
+
+                Ok(n)
+            })
+        }
+    }
+
+    /// Waits for the pipe to become writable.
     ///
     /// This function is equivalent to `ready(Interest::WRITABLE)` and is usually
     /// paired with `try_write()`.
@@ -1263,7 +1427,7 @@ impl NamedPipeClient {
         self.io.registration().poll_write_ready(cx).map_ok(|_| ())
     }
 
-    /// Try to write a buffer to the pipe, returning how many bytes were
+    /// Tries to write a buffer to the pipe, returning how many bytes were
     /// written.
     ///
     /// The function will attempt to write the entire contents of `buf`, but
@@ -1318,7 +1482,7 @@ impl NamedPipeClient {
             .try_io(Interest::WRITABLE, || (&*self.io).write(buf))
     }
 
-    /// Try to write several buffers to the pipe, returning how many bytes
+    /// Tries to write several buffers to the pipe, returning how many bytes
     /// were written.
     ///
     /// Data is written from each buffer in order, with the final buffer read
@@ -1379,7 +1543,7 @@ impl NamedPipeClient {
             .try_io(Interest::WRITABLE, || (&*self.io).write_vectored(buf))
     }
 
-    /// Try to read or write from the socket using a user-provided IO operation.
+    /// Tries to read or write from the socket using a user-provided IO operation.
     ///
     /// If the socket is ready, the provided closure is called. The closure
     /// should attempt to perform IO operation from the socket by manually
@@ -1882,7 +2046,7 @@ impl ServerOptions {
         self
     }
 
-    /// Create the named pipe identified by `addr` for use as a server.
+    /// Creates the named pipe identified by `addr` for use as a server.
     ///
     /// This uses the [`CreateNamedPipe`] function.
     ///
@@ -1913,7 +2077,7 @@ impl ServerOptions {
         unsafe { self.create_with_security_attributes_raw(addr, ptr::null_mut()) }
     }
 
-    /// Create the named pipe identified by `addr` for use as a server.
+    /// Creates the named pipe identified by `addr` for use as a server.
     ///
     /// This is the same as [`create`] except that it supports providing the raw
     /// pointer to a structure of [`SECURITY_ATTRIBUTES`] which will be passed
@@ -2042,7 +2206,7 @@ impl ClientOptions {
         self
     }
 
-    /// Open the named pipe identified by `addr`.
+    /// Opens the named pipe identified by `addr`.
     ///
     /// This opens the client using [`CreateFile`] with the
     /// `dwCreationDisposition` option set to `OPEN_EXISTING`.
@@ -2099,7 +2263,7 @@ impl ClientOptions {
         unsafe { self.open_with_security_attributes_raw(addr, ptr::null_mut()) }
     }
 
-    /// Open the named pipe identified by `addr`.
+    /// Opens the named pipe identified by `addr`.
     ///
     /// This is the same as [`open`] except that it supports providing the raw
     /// pointer to a structure of [`SECURITY_ATTRIBUTES`] which will be passed
@@ -2201,7 +2365,7 @@ pub struct PipeInfo {
     pub in_buffer_size: u32,
 }
 
-/// Encode an address so that it is a null-terminated wide string.
+/// Encodes an address so that it is a null-terminated wide string.
 fn encode_addr(addr: impl AsRef<OsStr>) -> Box<[u16]> {
     let len = addr.as_ref().encode_wide().count();
     let mut vec = Vec::with_capacity(len + 1);

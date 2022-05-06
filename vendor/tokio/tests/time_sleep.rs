@@ -24,7 +24,7 @@ async fn immediate_sleep() {
 async fn is_elapsed() {
     time::pause();
 
-    let sleep = time::sleep(Duration::from_millis(50));
+    let sleep = time::sleep(Duration::from_millis(10));
 
     tokio::pin!(sleep);
 
@@ -233,22 +233,6 @@ async fn long_sleeps() {
 
     assert!(tokio::time::Instant::now() >= deadline);
     assert!(tokio::time::Instant::now() <= deadline + Duration::from_millis(1));
-}
-
-#[tokio::test]
-#[should_panic(expected = "Duration too far into the future")]
-async fn very_long_sleeps() {
-    tokio::time::pause();
-
-    // Some platforms (eg macos) can't represent times this far in the future
-    if let Some(deadline) = tokio::time::Instant::now().checked_add(Duration::from_secs(1u64 << 62))
-    {
-        tokio::time::sleep_until(deadline).await;
-    } else {
-        // make it pass anyway (we can't skip/ignore the test based on the
-        // result of checked_add)
-        panic!("Duration too far into the future (test ignored)")
-    }
 }
 
 #[tokio::test]

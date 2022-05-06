@@ -6,6 +6,7 @@ use crate::database::DATABASE_CONNECTION;
 use std::error::Error;
 use async_trait::async_trait;
 use mongodb::bson::doc;
+use crate::error::DatabaseError;
 
 pub struct JokeAddHandler {
 }
@@ -16,12 +17,14 @@ impl JokeAddHandler {
     }
 
 
-    async fn add_joke_to_db(&self, setup: &str, punchline: &str) -> Result<(), Box<dyn Error>> {
+    async fn add_joke_to_db(&self, setup: &str, punchline: &str) -> Result<(), Box<dyn Error + Send>> {
         let db_con = DATABASE_CONNECTION.lock().await;
 
         let thing = db_con.get_collection(DB_JOKE_COLLECTION)?;
-        thing.insert_one(doc! { "setup": setup, "punchline": punchline}, None).await?;
-        Ok(())
+        match thing.insert_one(doc! { "setup": setup, "punchline": punchline}, None).await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(Box::new(DatabaseError::new(&e.to_string())))
+        }
     }
 }
 

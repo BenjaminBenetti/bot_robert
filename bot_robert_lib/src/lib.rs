@@ -7,6 +7,7 @@ pub mod transfer;
 pub mod converter;
 pub mod service;
 pub mod tasks;
+mod factory;
 
 extern crate chrono;
 extern crate chrono_tz;

@@ -1,0 +1,1 @@
+pub mod lunch_spot_factory;

@@ -81,6 +81,35 @@ impl SlackBlock {
             None)
     }
 
+    /// create a new checkbox slack block
+    /// ### params
+    /// label - label text to show above the checkboxes
+    /// action_id - the id of the checkbox action
+    /// options - tuple Label, Value, checked.
+    pub fn new_checkbox_block(label: &str, action_id: &String, options: Vec<(String, String, bool)>) -> SlackBlock {
+        let option_elements: Vec<SlackElement> = options.iter()
+            .map(|opt| SlackElement::new_checkbox_option(&SlackText::new_plain_text(&opt.0), &opt.1)).collect();
+
+        let initial_option_elements: Vec<SlackElement> = options.iter()
+            .filter(|opt| opt.2)
+            .map(|opt| SlackElement::new_checkbox_option(&SlackText::new_plain_text(&opt.0), &opt.1)).collect();
+
+        SlackBlock::new(
+            SlackBlockType::Input,
+            vec!(
+                &SlackElement::new_checkbox(action_id,
+                                            option_elements.iter().collect(),
+                                            if initial_option_elements.len() > 0 {
+                                                Some(initial_option_elements.iter().collect())
+                                            } else {
+                                                None
+                                            })
+            ),
+            Some(&SlackText::new_plain_text(&label)),
+            None
+        )
+    }
+
     /// create a slack block that contains text
     /// ### params
     /// - text. The text to display in the block.

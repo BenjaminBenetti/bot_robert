@@ -6,39 +6,43 @@ It consists of a `Choice` type, and a collection of traits using `Choice`
 instead of `bool` which are intended to execute in constant-time.  The `Choice`
 type is a wrapper around a `u8` that holds a `0` or `1`.
 
+```toml
+subtle = "2.4"
+```
+
 This crate represents a “best-effort” attempt, since side-channels
 are ultimately a property of a deployed cryptographic system
 including the hardware it runs on, not just of software.
 
 The traits are implemented using bitwise operations, and should execute in
-constant time provided that a) the bitwise operations are constant-time and b)
-the operations are not optimized into a branch.
+constant time provided that a) the bitwise operations are constant-time and
+b) the bitwise operations are not recognized as a conditional assignment and
+optimized back into a branch.
 
-To prevent the latter possibility, when using the `nightly` feature
-(recommended), the crate attempts to hide the value of a `Choice`'s inner `u8`
-from the optimizer, by passing it through an inline assembly block.  For more
-information, see the _About_ section below.
+For a compiler to recognize that bitwise operations represent a conditional
+assignment, it needs to know that the value used to generate the bitmasks is
+really a boolean `i1` rather than an `i8` byte value. In an attempt to
+prevent this refinement, the crate tries to hide the value of a `Choice`'s
+inner `u8` by passing it through a volatile read. For more information, see
+the _About_ section below.
 
-When not using the `nightly` feature, there is no protection against b).  This
-is unfortunate, but is at least no worse than C code, and has the advantange
-that if a suitable black box is stabilized, we will be able to transparently
-enable it with no changes to the external interface).
+Versions prior to `2.2` recommended use of the `nightly` feature to enable an
+optimization barrier; this is not required in versions `2.2` and above.
 
-```toml
-[dependencies.subtle]
-version = "1"
-features = ["nightly"]
-```
-
-## Features
-
-* The `nightly` feature enables the use of
-an optimization barrier to protect the `Choice` type.
-_Using the `nightly` feature is recommended for security_.
+Note: the `subtle` crate contains `debug_assert`s to check invariants during
+debug builds. These invariant checks involve secret-dependent branches, and
+are not present when compiled in release mode. This crate is intended to be
+used in release mode.
 
 ## Documentation
 
 Documentation is available [here][docs].
+
+## Minimum Supported Rust Version
+
+Rust **1.41** or higher.
+
+Minimum supported Rust version can be changed in the future, but it will be done with a minor version bump.
 
 ## About
 
@@ -61,5 +65,5 @@ effort is fundamentally limited.
 
 **USE AT YOUR OWN RISK**
 
-[docs]: https://doc.dalek.rs/subtle
+[docs]: https://docs.rs/subtle
 [rust-timing-shield]: https://www.chosenplaintext.ca/open-source/rust-timing-shield/security

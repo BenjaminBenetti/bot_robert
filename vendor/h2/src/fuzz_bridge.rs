@@ -1,7 +1,7 @@
 #[cfg(fuzzing)]
 pub mod fuzz_logic {
     use crate::hpack;
-    use bytes::{BufMut, BytesMut};
+    use bytes::BytesMut;
     use http::header::HeaderName;
     use std::io::Cursor;
 
@@ -22,7 +22,7 @@ pub mod fuzz_logic {
 
     fn encode(e: &mut hpack::Encoder, hdrs: Vec<hpack::Header<Option<HeaderName>>>) -> BytesMut {
         let mut dst = BytesMut::with_capacity(1024);
-        e.encode(None, &mut hdrs.into_iter(), &mut (&mut dst).limit(1024));
+        e.encode(&mut hdrs.into_iter(), &mut dst);
         dst
     }
 }
