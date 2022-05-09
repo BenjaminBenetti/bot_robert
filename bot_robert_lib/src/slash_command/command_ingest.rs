@@ -4,8 +4,8 @@ use crate::slash_command::handlers::fixed_response_handler::FixedResponseHandler
 use crate::slash_command::handlers::command_handler::CommandHandler;
 use crate::slash_command::handlers::simple_random_response_handler::SimpleRandomResponseHandler;
 use crate::slash_command::factory::slack_response_factory;
-use crate::slash_command::factory::lunch_options_factory;
 use crate::slash_command::model::Command;
+use crate::slash_command::handlers::lunch_handler::LunchHandler;
 
 /// process an incoming slash command
 /// ### params
@@ -20,7 +20,7 @@ pub async fn process_command(user_name: &String, args: &String) -> SlackResponse
     for processor in command_processors {
         if processor.can_handle_command(args) {
             println!("Processing Command: [{}] From User: [{}]", args, user_name);
-            return processor.handle_command(args, user_name).unwrap_or(SlackResponse::from_string("Ahhhhhh... I need a beer."))
+            return processor.handle_command(args, user_name).await.unwrap_or(SlackResponse::from_string("Ahhhhhh... I need a beer."))
         }
     }
 
@@ -30,7 +30,7 @@ pub async fn process_command(user_name: &String, args: &String) -> SlackResponse
 /// get command processor list
 async fn get_command_processors() -> Vec<Box<dyn CommandHandler>> {
     vec!(
-        Box::new(SimpleRandomResponseHandler::new(&Command::Lunch.to_string(), &lunch_options_factory::lunch_options())),
+        Box::new(LunchHandler::new()),
         Box::new(FixedResponseHandler::new(&Command::NewProject.to_string(), &SlackResponse::from_string("No Time"))),
         Box::new(SimpleRandomResponseHandler::new(&Command::Sarcasm.to_string(), &vec!(
             SlackResponse::from_string("I don't understand"),
@@ -43,6 +43,6 @@ async fn get_command_processors() -> Vec<Box<dyn CommandHandler>> {
                                   &SlackResponse::from_string(&String::from("https://github.com/CanadianCommander/bot_robert")))),
         Box::new(SimpleRandomResponseHandler::new(&String::from("joke"), &jokes::jokes_as_slack_responses().await)),
         Box::new(FixedResponseHandler::new(&String::from("joke-add"), &slack_response_factory::joke_add_response())),
-        Box::new(FixedResponseHandler::new(&"lunch-add".to_string(),&slack_response_factory::lunch_add_response(true, true, true, true, true)))
+        Box::new(FixedResponseHandler::new(&Command::LunchAdd.to_string(),&slack_response_factory::lunch_add_response(true, true, true, true, true)))
     )
 }

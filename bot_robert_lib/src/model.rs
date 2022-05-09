@@ -33,3 +33,4 @@ pub use slack_block_actions_state::SlackBlockActionsState;
 pub use slack_action_option::SlackActionOption;
 pub use lunch_spot::LunchSpot;
 pub use lunch_spot::LUNCH_SPOT_COLLECTION;
+pub use lunch_spot::BASE_LUNCH_SPOT_SCORE;

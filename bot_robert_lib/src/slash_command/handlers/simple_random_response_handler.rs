@@ -1,4 +1,5 @@
 use crate::model::*;
+use async_trait::async_trait;
 use crate::slash_command::handlers::command_processor::CommandProcessor;
 use crate::slash_command::handlers::command_matcher::CommandMatcher;
 use crate::slash_command::handlers::command_handler::CommandHandler;
@@ -19,8 +20,9 @@ impl SimpleRandomResponseHandler {
     }
 }
 
+#[async_trait]
 impl CommandProcessor for SimpleRandomResponseHandler {
-    fn handle_command(&self, _command: &String, _user_name: &String) -> Option<SlackResponse> {
+    async fn handle_command(&self, _command: &String, _user_name: &String) -> Option<SlackResponse> {
         let rand_index = rand::thread_rng().gen_range(0..(self.responses.len()));
         Some(self.responses.get(rand_index).map(|resp| resp.clone())
             .unwrap_or(SlackResponse::from_string(&String::from("Hmm. This doesn't seem right. :/")).clone()))

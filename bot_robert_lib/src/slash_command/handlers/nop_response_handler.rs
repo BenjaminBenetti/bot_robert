@@ -18,7 +18,7 @@ impl NopResponseHandler {
 
 #[async_trait]
 impl CommandProcessor for NopResponseHandler {
-    fn handle_command(&self, _command: &String, _user_name: &String) -> Option<SlackResponse> {
+    async fn handle_command(&self, _command: &String, _user_name: &String) -> Option<SlackResponse> {
         None
     }
 

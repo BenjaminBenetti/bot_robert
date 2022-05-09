@@ -31,7 +31,6 @@ pub fn create_lunch_spot_from_form(action_state: &Vec<SlackBlockActionsState>) -
 
     if let Some(name) = lunch_spot_name {
         Ok(LunchSpot::new(name,
-                       0,
                        open_days.contains_key(Weekday::Mon.to_string().as_str()),
                        open_days.contains_key(Weekday::Tue.to_string().as_str()),
                        open_days.contains_key(Weekday::Wed.to_string().as_str()),
