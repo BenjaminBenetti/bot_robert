@@ -15,12 +15,12 @@ pub fn build_lunch_spot_response(lunch_spot: &LunchSpot) -> SlackResponse {
 
     if lunch_spot.up_voters.len() > 0
     {
-        blocks.push(SlackBlock::new_text_block(lunch_spot.up_voters.iter().fold(":yum:".to_string(), |acc, voter|  format!("{} {} ", acc, voter)).as_ref()));
+        blocks.push(SlackBlock::new_text_block(lunch_spot.up_voters.iter().fold(":yum:".to_string(), |acc, voter|  format!("{} {}", acc, voter)).as_ref()));
     }
 
     if lunch_spot.down_voters.len() > 0
     {
-        blocks.push(SlackBlock::new_text_block(lunch_spot.down_voters.iter().fold(":disappointed:".to_string(), |acc, voter|  format!("{} {} ", acc,  voter)).as_ref()));
+        blocks.push(SlackBlock::new_text_block(lunch_spot.down_voters.iter().fold(":disappointed:".to_string(), |acc, voter|  format!("{} {}", acc,  voter)).as_ref()));
     }
 
     SlackResponse::new(
