@@ -56,6 +56,30 @@ impl SlackBlock {
             None)
     }
 
+    /// create a slack block that contains one or more buttons in a row
+    /// ### params
+    /// - button_definitions - tuple with three values in the following order
+    ///     - button text
+    ///     - button value
+    ///     - button action id
+    /// ### return
+    /// - slack block - the newly constructed slack block
+    pub fn new_buttons(button_definitions: Vec<(&str, &str, &str)>) -> SlackBlock {
+        SlackBlock::new(
+            SlackBlockType::Actions,
+            button_definitions.iter().map(|button_def| {
+                SlackElement::new(
+                    SlackElementType::Button,
+                    Some(&SlackText::new_plain_text(button_def.0)),
+                    Some(&String::from(button_def.1)),
+                    None,
+                    Some(&String::from(button_def.2))
+                )
+            }).collect::<Vec<SlackElement>>().iter().collect(),
+            None,
+            None)
+    }
+
     /// create a slack block that is a button. Includes a second button for canceling
     /// ### params
     /// - text. The text on the button.

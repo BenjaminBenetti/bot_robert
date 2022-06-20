@@ -5,6 +5,7 @@ use crate::model::{SlackBlockActions, SlackResponse, LUNCH_SPOT_COLLECTION, Lunc
 use crate::slash_command::handlers::command_matcher::CommandMatcher;
 use crate::slash_command::handlers::command_handler::CommandHandler;
 use crate::factory::lunch_spot_factory;
+use mongodb::error::{ErrorKind};
 
 pub const ACTION_ID: &str = "lunch_add";
 
@@ -28,8 +29,14 @@ impl CommandProcessor for LunchAddResponseHandler {
                 let db_con = DATABASE_CONNECTION.lock().await;
 
                 if let Ok(lunch_spot_collection) = db_con.get_collection::<LunchSpot>(LUNCH_SPOT_COLLECTION) {
-                    if let Ok(_) = lunch_spot_collection.insert_one(spot.clone(), None).await {
-                        return Some(SlackResponse::from_string(&format!("I've added \"{}\" to the menu!", spot.name)))
+                    match lunch_spot_collection.insert_one(spot.clone(), None).await {
+                        Ok(_) => return Some(SlackResponse::from_string(&format!("I've added \"{}\" to the menu!", spot.name))),
+                        Err(err) => {
+                            match err.kind.as_ref() {
+                                ErrorKind::WriteError(_) => return Some(SlackResponse::from_string("Nice try Brain.")),
+                                _ => (),
+                            };
+                        },
                     }
                 }
                 return Some(SlackResponse::from_string(&format!(":thinking_face: my webscale DB has failed me again!")))

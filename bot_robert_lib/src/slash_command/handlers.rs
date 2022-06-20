@@ -7,3 +7,4 @@ pub mod joke_add_handler;
 pub mod nop_response_handler;
 pub mod lunch_add_response_handler;
 pub mod lunch_handler;
+pub mod lunch_vote_handler;

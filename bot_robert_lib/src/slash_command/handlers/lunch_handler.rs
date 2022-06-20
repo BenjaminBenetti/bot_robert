@@ -9,6 +9,10 @@ use rand::Rng;
 use crate::error::{StandardError, DatabaseError};
 use futures::StreamExt;
 use crate::slash_command::model::Command;
+use crate::slash_command::factory::lunch_spot_response_factory::build_lunch_spot_response;
+
+pub const LUNCH_UP_VOTE_ACTION_ID: &str = "lunch_up_vote";
+pub const LUNCH_DOWN_VOTE_ACTION_ID: &str = "lunch_down_vote";
 
 pub struct LunchHandler {
 }
@@ -75,7 +79,7 @@ impl LunchHandler {
 impl CommandProcessor for LunchHandler {
     async fn handle_command(&self, _command: &String, _user_name: &String) -> Option<SlackResponse> {
         match self.get_random_lunch_spot().await {
-            Ok(lunch_spot) => Some(SlackResponse::from_string(lunch_spot.name.as_str())),
+            Ok(lunch_spot) => Some(build_lunch_spot_response(&lunch_spot)),
             Err(e) => {
                 println!("Error: {}", e.to_string());
                 Some(SlackResponse::from_string("ahhhhhh hmmm..... nothing."))

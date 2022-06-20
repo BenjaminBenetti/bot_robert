@@ -10,6 +10,7 @@ mod slack_block_actions_action_transfer;
 mod slack_block_actions_states_transfer;
 mod slack_block_actions_state_transfer;
 mod slack_action_option_transfer;
+mod slack_block_actions_user_transfer;
 
 pub use slash_command_transfer::*;
 pub use slack_response_transfer::*;

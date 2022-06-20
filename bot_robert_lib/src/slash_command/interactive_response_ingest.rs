@@ -8,6 +8,7 @@ use crate::slash_command::handlers::fixed_response_handler::FixedResponseHandler
 use crate::slash_command::handlers::nop_response_handler::NopResponseHandler;
 use crate::slash_command::handlers::nop_response_handler;
 use crate::slash_command::handlers::lunch_add_response_handler::LunchAddResponseHandler;
+use crate::slash_command::handlers::lunch_vote_handler::LunchVoteHandler;
 
 /// process a slack action. producing a slack response & return url indicating where to send the response
 pub async fn process_action(response: &SlackFormPayloadTransfer) -> Result<(Option<SlackResponse>, Option<String>), Box<dyn Error>>{
@@ -52,6 +53,7 @@ fn get_block_action_processors() -> Vec<Box<dyn CommandHandler>> {
         Box::new(NopResponseHandler::new(&nop_response_handler::ACTION_ID.to_string())),
         Box::new(JokeAddHandler::new()),
         Box::new(LunchAddResponseHandler::new()),
+        Box::new(LunchVoteHandler::new()),
         Box::new(FixedResponseHandler::new(&String::from("cancel-action"), &SlackResponse::from_string_ephemeral("Ok then. :fast_parrot:"))),
     )
 }
